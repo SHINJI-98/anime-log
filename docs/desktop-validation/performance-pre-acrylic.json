@@ -1,0 +1,554 @@
+{
+  "complete": true,
+  "fixture": "empty isolated SQLite; native detector runs with its display mapping moved offscreen to avoid unrelated fullscreen applications; image workload unmeasured",
+  "samples": [
+    {
+      "time": "2026-09-15T15:05:15.133Z",
+      "mode": "ball",
+      "cpu": 0,
+      "memoryKB": 510728,
+      "helper": {
+        "memoryKB": 82248,
+        "cpuSeconds": 0.40625
+      },
+      "processes": 5,
+      "heapBytes": 3807036,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 0,
+      "visible": false
+    },
+    {
+      "time": "2026-09-15T15:05:18.154Z",
+      "mode": "tray",
+      "cpu": 0.48194696955601846,
+      "memoryKB": 510420,
+      "helper": {
+        "memoryKB": 0,
+        "cpuSeconds": 0
+      },
+      "processes": 5,
+      "heapBytes": 3816052,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 0,
+      "visible": false
+    },
+    {
+      "time": "2026-09-15T15:05:21.192Z",
+      "mode": "panel-before-cycles",
+      "cpu": 0.2835944243012918,
+      "memoryKB": 511584,
+      "helper": {
+        "memoryKB": 82324,
+        "cpuSeconds": 0.296875
+      },
+      "processes": 5,
+      "heapBytes": 3902960,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:05:26.356Z",
+      "mode": "panel-after-100-cycles",
+      "cpu": 2.723696605301929,
+      "memoryKB": 538512,
+      "helper": {
+        "memoryKB": 82324,
+        "cpuSeconds": 0.328125
+      },
+      "processes": 5,
+      "heapBytes": 4308548,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:06:26.385Z",
+      "mode": "soak-1",
+      "cpu": 0.0313238614678333,
+      "memoryKB": 518032,
+      "helper": {
+        "memoryKB": 85764,
+        "cpuSeconds": 0.796875
+      },
+      "processes": 5,
+      "heapBytes": 2795536,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:07:26.400Z",
+      "mode": "soak-2",
+      "cpu": 0.02784577427396146,
+      "memoryKB": 517208,
+      "helper": {
+        "memoryKB": 85768,
+        "cpuSeconds": 1.234375
+      },
+      "processes": 5,
+      "heapBytes": 2802964,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:08:26.423Z",
+      "mode": "soak-3",
+      "cpu": 0.02134012753886459,
+      "memoryKB": 517608,
+      "helper": {
+        "memoryKB": 86164,
+        "cpuSeconds": 1.703125
+      },
+      "processes": 5,
+      "heapBytes": 2810392,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:09:26.451Z",
+      "mode": "soak-4",
+      "cpu": 0.021550185661744454,
+      "memoryKB": 517944,
+      "helper": {
+        "memoryKB": 86476,
+        "cpuSeconds": 2.078125
+      },
+      "processes": 5,
+      "heapBytes": 2817868,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:10:26.468Z",
+      "mode": "soak-5",
+      "cpu": 0.022103776728700446,
+      "memoryKB": 517216,
+      "helper": {
+        "memoryKB": 86856,
+        "cpuSeconds": 2.5
+      },
+      "processes": 5,
+      "heapBytes": 2825352,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:11:26.485Z",
+      "mode": "soak-6",
+      "cpu": 0.021164328650485602,
+      "memoryKB": 512360,
+      "helper": {
+        "memoryKB": 87216,
+        "cpuSeconds": 2.953125
+      },
+      "processes": 5,
+      "heapBytes": 2832796,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:12:26.510Z",
+      "mode": "soak-7",
+      "cpu": 0.02084782964573588,
+      "memoryKB": 508112,
+      "helper": {
+        "memoryKB": 87216,
+        "cpuSeconds": 3.484375
+      },
+      "processes": 5,
+      "heapBytes": 2840656,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:13:26.531Z",
+      "mode": "soak-8",
+      "cpu": 0.04549014727229106,
+      "memoryKB": 508104,
+      "helper": {
+        "memoryKB": 87212,
+        "cpuSeconds": 3.921875
+      },
+      "processes": 5,
+      "heapBytes": 2848148,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:14:26.555Z",
+      "mode": "soak-9",
+      "cpu": 0.039095971713216944,
+      "memoryKB": 508240,
+      "helper": {
+        "memoryKB": 87212,
+        "cpuSeconds": 4.296875
+      },
+      "processes": 5,
+      "heapBytes": 2862536,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:15:26.581Z",
+      "mode": "soak-10",
+      "cpu": 0.05216237106829113,
+      "memoryKB": 508376,
+      "helper": {
+        "memoryKB": 87952,
+        "cpuSeconds": 4.640625
+      },
+      "processes": 5,
+      "heapBytes": 2870544,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:16:26.601Z",
+      "mode": "soak-11",
+      "cpu": 0.061181473039116495,
+      "memoryKB": 507656,
+      "helper": {
+        "memoryKB": 87952,
+        "cpuSeconds": 5.0625
+      },
+      "processes": 5,
+      "heapBytes": 2878036,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:17:26.624Z",
+      "mode": "soak-12",
+      "cpu": 0.024171167978523114,
+      "memoryKB": 507600,
+      "helper": {
+        "memoryKB": 87952,
+        "cpuSeconds": 5.5
+      },
+      "processes": 5,
+      "heapBytes": 2885472,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:18:26.640Z",
+      "mode": "soak-13",
+      "cpu": 0.02079359911547442,
+      "memoryKB": 507628,
+      "helper": {
+        "memoryKB": 87956,
+        "cpuSeconds": 5.90625
+      },
+      "processes": 5,
+      "heapBytes": 2892908,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:19:26.658Z",
+      "mode": "soak-14",
+      "cpu": 0.021065678645948306,
+      "memoryKB": 507636,
+      "helper": {
+        "memoryKB": 87956,
+        "cpuSeconds": 6.4375
+      },
+      "processes": 5,
+      "heapBytes": 2900344,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:20:26.674Z",
+      "mode": "soak-15",
+      "cpu": 0.0209055452499932,
+      "memoryKB": 507672,
+      "helper": {
+        "memoryKB": 87980,
+        "cpuSeconds": 6.84375
+      },
+      "processes": 5,
+      "heapBytes": 2907780,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:21:26.700Z",
+      "mode": "soak-16",
+      "cpu": 0.020461790215966627,
+      "memoryKB": 507716,
+      "helper": {
+        "memoryKB": 87980,
+        "cpuSeconds": 7.21875
+      },
+      "processes": 5,
+      "heapBytes": 2915216,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:22:26.716Z",
+      "mode": "soak-17",
+      "cpu": 0.02240744969333526,
+      "memoryKB": 507756,
+      "helper": {
+        "memoryKB": 87980,
+        "cpuSeconds": 7.640625
+      },
+      "processes": 5,
+      "heapBytes": 2924756,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:23:26.736Z",
+      "mode": "soak-18",
+      "cpu": 0.020011544696159875,
+      "memoryKB": 507700,
+      "helper": {
+        "memoryKB": 87980,
+        "cpuSeconds": 8.0625
+      },
+      "processes": 5,
+      "heapBytes": 2932192,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:24:26.762Z",
+      "mode": "soak-19",
+      "cpu": 0.020653529007903446,
+      "memoryKB": 507740,
+      "helper": {
+        "memoryKB": 87980,
+        "cpuSeconds": 8.40625
+      },
+      "processes": 5,
+      "heapBytes": 2939628,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:25:26.788Z",
+      "mode": "soak-20",
+      "cpu": 0.019290388929538778,
+      "memoryKB": 507752,
+      "helper": {
+        "memoryKB": 87980,
+        "cpuSeconds": 8.8125
+      },
+      "processes": 5,
+      "heapBytes": 2947064,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:26:26.803Z",
+      "mode": "soak-21",
+      "cpu": 0.019879120416834165,
+      "memoryKB": 507768,
+      "helper": {
+        "memoryKB": 88696,
+        "cpuSeconds": 9.234375
+      },
+      "processes": 5,
+      "heapBytes": 2954500,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:27:26.829Z",
+      "mode": "soak-22",
+      "cpu": 0.019787077005914408,
+      "memoryKB": 507472,
+      "helper": {
+        "memoryKB": 88696,
+        "cpuSeconds": 9.71875
+      },
+      "processes": 5,
+      "heapBytes": 2961936,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:28:26.848Z",
+      "mode": "soak-23",
+      "cpu": 0.02006826973503933,
+      "memoryKB": 507488,
+      "helper": {
+        "memoryKB": 88696,
+        "cpuSeconds": 10.15625
+      },
+      "processes": 5,
+      "heapBytes": 2969372,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:29:26.869Z",
+      "mode": "soak-24",
+      "cpu": 0.019722789503130105,
+      "memoryKB": 507500,
+      "helper": {
+        "memoryKB": 88696,
+        "cpuSeconds": 10.546875
+      },
+      "processes": 5,
+      "heapBytes": 2976808,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:30:26.881Z",
+      "mode": "soak-25",
+      "cpu": 0.019496338960075264,
+      "memoryKB": 507212,
+      "helper": {
+        "memoryKB": 88608,
+        "cpuSeconds": 10.9375
+      },
+      "processes": 5,
+      "heapBytes": 2984244,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:31:26.909Z",
+      "mode": "soak-26",
+      "cpu": 0.02281544239363206,
+      "memoryKB": 507228,
+      "helper": {
+        "memoryKB": 88608,
+        "cpuSeconds": 11.359375
+      },
+      "processes": 5,
+      "heapBytes": 2991680,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:32:26.938Z",
+      "mode": "soak-27",
+      "cpu": 0.03461816850327808,
+      "memoryKB": 507252,
+      "helper": {
+        "memoryKB": 88544,
+        "cpuSeconds": 11.796875
+      },
+      "processes": 5,
+      "heapBytes": 2999116,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:33:26.967Z",
+      "mode": "soak-28",
+      "cpu": 0.03761384854985841,
+      "memoryKB": 507268,
+      "helper": {
+        "memoryKB": 88544,
+        "cpuSeconds": 12.1875
+      },
+      "processes": 5,
+      "heapBytes": 3006552,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:34:26.987Z",
+      "mode": "soak-29",
+      "cpu": 0.09495211217432017,
+      "memoryKB": 507296,
+      "helper": {
+        "memoryKB": 88816,
+        "cpuSeconds": 12.65625
+      },
+      "processes": 5,
+      "heapBytes": 3013988,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    },
+    {
+      "time": "2026-09-15T15:35:27.011Z",
+      "mode": "soak-30",
+      "cpu": 0.08007155600290503,
+      "memoryKB": 507308,
+      "helper": {
+        "memoryKB": 89100,
+        "cpuSeconds": 13.046875
+      },
+      "processes": 5,
+      "heapBytes": 3021424,
+      "nodes": 97,
+      "images": 0,
+      "intervals": 1,
+      "visible": true
+    }
+  ],
+  "openPaintLatencyMs": {
+    "mean": 18.972270000000062,
+    "max": 35.26209999999992
+  }
+}

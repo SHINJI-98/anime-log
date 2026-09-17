@@ -1,0 +1,18 @@
+const { app, BrowserWindow, screen } = require('electron')
+app.whenReady().then(async () => {
+  const background = new BrowserWindow({ frame: false, show: false, skipTaskbar: true })
+  const foreground = new BrowserWindow({ width: 400, height: 300, show: false })
+  await Promise.all([background.loadURL('data:text/html,Background fixture'), foreground.loadURL('data:text/html,Foreground fixture')])
+  process.on('message', command => {
+    if (command === 'quit') return app.quit()
+    background.setBounds(screen.getPrimaryDisplay().bounds)
+    background.setFullScreen(true)
+    background.showInactive()
+    foreground.show()
+    foreground.setAlwaysOnTop(true, 'screen-saver')
+    foreground.setFullScreen(command === 'fullscreen')
+    foreground.focus()
+    process.send('done')
+  })
+  process.send('ready')
+})

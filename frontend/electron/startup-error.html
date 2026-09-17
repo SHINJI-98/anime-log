@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>我的追番 · 启动失败</title>
+    <style>
+      :root {
+        color: #202124;
+        background: #f7f4ef;
+        font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+
+      main {
+        width: min(680px, calc(100vw - 48px));
+        background: #fff;
+        border: 1px solid #e3ded5;
+        border-radius: 8px;
+        padding: 32px;
+        box-shadow: 0 18px 50px rgba(32, 33, 36, 0.12);
+      }
+
+      h1 {
+        margin: 0 0 16px;
+        font-size: 28px;
+      }
+
+      p {
+        margin: 0 0 12px;
+        line-height: 1.7;
+      }
+
+      code {
+        display: block;
+        margin-top: 18px;
+        padding: 16px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #f2eee7;
+        border-radius: 6px;
+        color: #8a3d25;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>我的追番 · 启动失败</h1>
+      <p>本地数据服务初始化失败。请根据下方错误检查数据库文件和目录写入权限，然后重新打开应用。</p>
+      <p>桌面版无需安装 Java。迁移前的数据库备份保存在用户数据目录中的 anime-log.db.pre-desktop.bak。</p>
+      <details><summary>技术详情</summary><code id="message"></code></details>
+    </main>
+    <script>
+      const params = new URLSearchParams(window.location.search)
+      document.getElementById('message').textContent = params.get('message') || '未知启动错误'
+    </script>
+  </body>
+</html>

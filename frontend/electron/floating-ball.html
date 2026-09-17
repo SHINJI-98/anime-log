@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'">
+<title>我的追番 · 悬浮球</title>
+<style>
+html,body { margin:0; width:100%; height:100%; overflow:hidden; background:transparent; }
+.floating-icon { display:block; width:100%; height:100%; object-fit:contain; opacity:var(--ball-opacity,.72); user-select:none; -webkit-user-drag:none; cursor:move; transition:opacity .15s ease; }
+.floating-icon:hover { opacity:.95; }
+@media (prefers-reduced-motion: reduce) { .floating-icon { transition:none; } }
+</style>
+</head>
+<body><img class="floating-icon" src="../assets/app-icon.png" alt="我的追番" title="我的追番 · 悬停展开，拖动移动" draggable="false"></body>
+</html>

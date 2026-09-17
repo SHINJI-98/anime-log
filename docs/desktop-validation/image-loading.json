@@ -1,0 +1,8 @@
+{
+  "totalCards": 210,
+  "fixtureImageBytes": 733531,
+  "hiddenRequests": 0,
+  "firstOpenRequests": 77,
+  "reopenedRequests": 77,
+  "scope": "Renderer lazy loading and retained DOM reuse. Intercepted local PNG fixture; not CDN latency or HTTP cache measurement."
+}

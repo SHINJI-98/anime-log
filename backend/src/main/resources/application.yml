@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+anime-log:
+  database-path: data/anime-log.db
+  yuc-base-url: https://yuc.wiki
+  cache-ttl-hours: 24
+
+spring:
+  datasource:
+    driver-class-name: org.sqlite.JDBC
+    url: jdbc:sqlite:${anime-log.database-path}

@@ -1,0 +1,74 @@
+{
+  "complete": true,
+  "fixture": "empty isolated SQLite; native detector runs with its display mapping moved offscreen to avoid unrelated fullscreen applications; image workload unmeasured",
+  "samples": [
+    {
+      "time": "2026-09-16T13:55:59.631Z",
+      "mode": "ball",
+      "visible": false,
+      "cpu": 0,
+      "memoryKB": 483336,
+      "helper": {
+        "memoryKB": 0,
+        "cpuSeconds": 0
+      },
+      "processes": 5,
+      "heapBytes": 3544212,
+      "nodes": 95,
+      "images": 0,
+      "intervals": 1
+    },
+    {
+      "time": "2026-09-16T13:56:02.645Z",
+      "mode": "tray",
+      "visible": false,
+      "cpu": 0.2782909761257588,
+      "memoryKB": 483072,
+      "helper": {
+        "memoryKB": 0,
+        "cpuSeconds": 0
+      },
+      "processes": 5,
+      "heapBytes": 3550792,
+      "nodes": 95,
+      "images": 0,
+      "intervals": 1
+    },
+    {
+      "time": "2026-09-16T13:56:05.672Z",
+      "mode": "panel-before-cycles",
+      "visible": true,
+      "cpu": 0.1754028793704114,
+      "memoryKB": 484204,
+      "helper": {
+        "memoryKB": 0,
+        "cpuSeconds": 0
+      },
+      "processes": 5,
+      "heapBytes": 3588208,
+      "nodes": 95,
+      "images": 0,
+      "intervals": 1
+    },
+    {
+      "time": "2026-09-16T13:56:10.557Z",
+      "mode": "panel-after-100-cycles",
+      "visible": true,
+      "cpu": 1.241443680433733,
+      "memoryKB": 478928,
+      "helper": {
+        "memoryKB": 0,
+        "cpuSeconds": 0
+      },
+      "processes": 5,
+      "heapBytes": 3844156,
+      "nodes": 95,
+      "images": 0,
+      "intervals": 1
+    }
+  ],
+  "openPaintLatencyMs": {
+    "mean": 16.20716399999999,
+    "max": 17.346800000001167
+  }
+}
