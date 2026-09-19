@@ -1,14 +1,16 @@
-const { app, BrowserWindow, dialog, ipcMain, protocol, nativeTheme } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, protocol, nativeTheme, powerMonitor } = require('electron')
 const path = require('path')
 const { setupDesktop } = require('./desktop-windows.cjs')
 nativeTheme.themeSource = 'dark'
 const { createService } = require('./local-service.cjs')
+const { createBroadcastScheduler } = require('./broadcast-scheduler.cjs')
 if (process.env.ANIME_LOG_USER_DATA_DIR) app.setPath('userData', process.env.ANIME_LOG_USER_DATA_DIR)
 protocol.registerSchemesAsPrivileged([{ scheme: 'anime-log', privileges: {
   standard: true, secure: true, supportFetchAPI: true, corsEnabled: true
 } }])
 let mainWindow
 let service
+let broadcastScheduler
 const apiBaseUrl = 'anime-log://local/api'
 let desktopWindows
 ipcMain.handle('anime-log-reset-position', event => {
@@ -56,7 +58,8 @@ async function startLocalService() {
     migrationPath: process.env.ANIME_LOG_MIGRATION_DB || (isDev()
       ? path.resolve(__dirname, '../../backend/data/anime-log.db')
       : undefined),
-    baseUrl: process.env.ANIME_LOG_YUC_BASE_URL || 'https://yuc.wiki'
+    baseUrl: process.env.ANIME_LOG_YUC_BASE_URL || 'https://yuc.wiki',
+    bangumiBaseUrl: process.env.ANIME_LOG_BANGUMI_BASE_URL || 'https://api.bgm.tv'
   })
   protocol.handle('anime-log', async request => {
     const headers = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
@@ -135,6 +138,10 @@ if (!app.requestSingleInstanceLock()) {
     await startLocalService()
     await loadApp()
     desktopWindows.start()
+    broadcastScheduler = createBroadcastScheduler({ service, powerMonitor, onUpdated: results => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('anime-log-broadcast-updated', results)
+    } })
+    broadcastScheduler.start()
   } catch (error) {
     loadErrorPage(error)
     mainWindow.show()
@@ -149,7 +156,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => { service?.close(); service = null })
+app.on('before-quit', () => { broadcastScheduler?.stop(); broadcastScheduler = null; service?.close(); service = null })
 
 app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {

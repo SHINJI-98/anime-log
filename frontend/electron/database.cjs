@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS broadcast_bindings (
  anime_source_id INTEGER PRIMARY KEY, bangumi_subject_id INTEGER NOT NULL,
  subject_name TEXT NOT NULL, subject_name_cn TEXT, subject_image_url TEXT, subject_air_date TEXT,
  notify_enabled INTEGER NOT NULL DEFAULT 1 CHECK(notify_enabled IN (0,1)),
- last_attempt_at TEXT, last_success_at TEXT, last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ last_attempt_at TEXT, last_success_at TEXT, last_error TEXT,
+ failure_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
  FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);
 CREATE INDEX IF NOT EXISTS idx_broadcast_bindings_subject ON broadcast_bindings(bangumi_subject_id);
 CREATE TABLE IF NOT EXISTS broadcast_episodes (
@@ -95,6 +96,9 @@ async function openDatabase(filename, migrationPath) {
     if (!rows('PRAGMA table_info(anime_sources)').some(column => column.name === 'air_day')) {
       db.run('ALTER TABLE anime_sources ADD COLUMN air_day TEXT')
     }
+    const broadcastColumns = rows('PRAGMA table_info(broadcast_bindings)').map(column => column.name)
+    if (!broadcastColumns.includes('failure_count')) db.run('ALTER TABLE broadcast_bindings ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0')
+    if (!broadcastColumns.includes('next_retry_at')) db.run('ALTER TABLE broadcast_bindings ADD COLUMN next_retry_at TEXT')
   })
   return { rows, run, write, close: () => db.close() }
 }

@@ -6,6 +6,7 @@ const path = require('node:path')
 const { createService, currentSeason } = require('../electron/local-service.cjs')
 const { openDatabase } = require('../electron/database.cjs')
 const { parseAnime, javaHash } = require('../electron/yuc-parser.cjs')
+const { calculateProgress, shanghaiDate, validDate } = require('../electron/broadcast-progress.cjs')
 
 function card(title = '测试番剧', episodes = '全12话') {
   return `<div><div><div class="div_date_"><img data-src="http://i0.hdslb.com/a.jpg"><p class="imgtext5">23:00</p></div><div><table><tr><td class="date_title_">${title}</td></tr><tr><td>${episodes}</td></tr></table></div></div></div>`
@@ -35,6 +36,24 @@ test('season advances 14 days before next quarter including year rollover', () =
   assert.equal(currentSeason(new Date(2026, 8, 16)).season, '202607')
   assert.equal(currentSeason(new Date(2026, 8, 17)).season, '202610')
   assert.deepEqual(currentSeason(new Date(2026, 11, 18)), { season: '202701', previousSeason: '202610', nextSeason: '202704' })
+})
+
+test('broadcast progress uses Shanghai dates, excludes today from aired progress and keeps fractional episodes', () => {
+  const now = new Date('2026-09-19T01:00:00Z')
+  const episodes = [
+    { bangumiEpisodeId: 1, episodeType: 0, episodeNumber: 1, sortNumber: 1, airDate: '2026-09-18' },
+    { bangumiEpisodeId: 2, episodeType: 0, episodeNumber: 1.5, sortNumber: 1.5, airDate: '2026-09-19' },
+    { bangumiEpisodeId: 3, episodeType: 0, episodeNumber: 2, sortNumber: 2, airDate: '2026-09-20' },
+    { bangumiEpisodeId: 4, episodeType: 1, episodeNumber: 9, sortNumber: 9, airDate: '2026-09-17' },
+    { bangumiEpisodeId: 5, episodeType: 0, episodeNumber: 99, sortNumber: 99, airDate: 'not-a-date' }
+  ]
+  const result = calculateProgress(episodes, now)
+  assert.equal(shanghaiDate(now), '2026-09-19')
+  assert.equal(result.estimatedAiredEpisode, 1)
+  assert.deepEqual(result.todayEpisodes, [{ id: 2, episodeNumber: 1.5 }])
+  assert.deepEqual(result.next, { date: '2026-09-19', episodes: [{ id: 2, episodeNumber: 1.5 }] })
+  assert.equal(validDate('2026-02-29'), false)
+  assert.equal(validDate('2028-02-29'), true)
 })
 
 test('local CRUD persists, refresh preserves followed/noted anime, validates and keeps cache on failures', async t => {
@@ -87,6 +106,9 @@ test('Bangumi search and confirmed binding persist without changing watch progre
     if (String(url).endsWith('/v0/subjects/123')) return new Response(JSON.stringify({
       id: 123, type: 2, name: 'Test Anime', name_cn: '测试番剧', date: '2026-07-01', images: { common: 'https://lain.bgm.tv/pic.jpg' }
     }))
+    if (String(url).includes('/v0/episodes')) return new Response(JSON.stringify({ total: 1, data: [
+      { id: 501, type: 0, ep: 1, sort: 1, name: 'Episode 1', name_cn: '第一集', airdate: '2026-07-02' }
+    ] }))
     return new Response(card())
   }
   let service = await createService({ filename: path.join(dir, 'anime.db'), fetcher })
@@ -98,17 +120,17 @@ test('Bangumi search and confirmed binding persist without changing watch progre
   assert.equal(results.length, 1)
   assert.equal(results[0].nameCn, '测试番剧')
   const binding = await service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { bangumiSubjectId: 123 })
-  assert.equal(binding.bangumiSubjectId, 123)
-  assert.equal(binding.notifyEnabled, 1)
+  assert.equal(binding.subject.id, 123)
+  assert.equal(binding.notifyEnabled, true)
   service.close()
   service = await createService({ filename: path.join(dir, 'anime.db'), fetcher })
   const saved = (await service.request('GET', '/api/watch-records'))[0]
   assert.equal(saved.id, record.id)
   assert.equal(saved.watchedEpisodes, 4)
-  assert.equal(saved.broadcast.subjectNameCn, '测试番剧')
+  assert.equal(saved.broadcast.subject.nameCn, '测试番剧')
   assert.equal((await service.request('GET', `/api/anime/${anime.id}/notes`)).summary.content, '保留笔记')
   await service.request('DELETE', `/api/anime/${anime.id}/broadcast-binding`)
-  assert.equal((await service.request('GET', '/api/watch-records'))[0].broadcast, undefined)
+  assert.equal((await service.request('GET', '/api/watch-records'))[0].broadcast, null)
   assert.ok(requests.find(item => item.url.includes('/v0/search/subjects')).options.headers['User-Agent'])
 })
 

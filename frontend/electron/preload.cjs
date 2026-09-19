@@ -31,6 +31,11 @@ contextBridge.exposeInMainWorld('animeLogDesktop', Object.freeze({
     const listener = (_event, compact) => callback(compact)
     ipcRenderer.on('anime-log-mode-changed', listener)
     return () => ipcRenderer.removeListener('anime-log-mode-changed', listener)
+  },
+  onBroadcastUpdated: callback => {
+    const listener = (_event, results) => callback(results)
+    ipcRenderer.on('anime-log-broadcast-updated', listener)
+    return () => ipcRenderer.removeListener('anime-log-broadcast-updated', listener)
   }
 }))
 
