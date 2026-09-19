@@ -13,6 +13,8 @@ async function main() {
   assert(files.some(file => file.endsWith('sql-wasm.wasm')))
   assert(files.some(file => file.endsWith('app-icon.png')))
   assert(files.some(file => file.endsWith('anilist-client.cjs')))
+  assert(files.some(file => file.endsWith('anilist-chinese.json')))
+  assert(files.some(file => file.endsWith('anime-names.cjs')))
   assert(!files.some(file => file.endsWith('bangumi-client.cjs')))
   assert(!files.some(file => /\.jar$|\.db$|node_modules[\\/]vite[\\/]/.test(file)))
   assert(!fs.existsSync(path.join(output, 'resources/backend')))
@@ -26,7 +28,7 @@ async function main() {
   let app
   try {
     app = await _electron.launch({ executablePath: path.join(output, 'Anime Log.exe'), env: {
-      ...env, PATH: process.env.SystemRoot || 'C:\\Windows', ANIME_LOG_USER_DATA_DIR: dir
+      ...env, PATH: process.env.SystemRoot || 'C:\\Windows', ANIME_LOG_USER_DATA_DIR: dir, ANIME_LOG_NAME_CATALOG_UPDATES: '0'
     } })
     const page = await app.firstWindow()
     await page.locator('[data-testid="watchlist-view"]').waitFor()

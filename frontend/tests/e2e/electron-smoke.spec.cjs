@@ -49,6 +49,9 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
     await page.locator('[data-testid="open-broadcast-binding"]').click()
     await expect(page.getByRole('dialog', { name: '关联 AniList' })).toBeVisible()
     await expect(page.locator('[data-testid="bind-anilist-candidate"]')).toHaveCount(1)
+    await page.getByTestId('anilist-search-input').fill('葬送的芙莉莲')
+    await page.getByRole('button', { name: '搜索', exact: true }).click()
+    await expect(page.locator('.binding-candidates')).toContainText('葬送的芙莉莲')
     await page.getByTestId('anilist-manual-input').fill('https://bgm.tv/subject/321')
     await page.getByRole('button', { name: '使用链接或 ID' }).click()
     await expect(page.getByRole('dialog', { name: '关联 AniList' })).toContainText('请输入有效的 AniList 动画链接或 ID')
@@ -56,9 +59,9 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
     await page.getByRole('button', { name: '使用链接或 ID' }).click()
     await expect(page.locator('[data-testid="bind-anilist-candidate"]')).toHaveCount(1)
     await page.locator('[data-testid="bind-anilist-candidate"]').click()
-    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('按排期预计已播至第 1 集')
-    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('今日预计播出第 2 集')
-    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('数据来源：AniList')
+    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('预计播至第 1 集')
+    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('今日预计第 2 集')
+    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('AniList')
     await expect(page.locator('[data-testid="watchlist-view"] .day-section')).toHaveCount(1)
     await page.locator('.clickable-poster').first().click()
     await expect(page.locator('.poster-modal')).toBeVisible()
@@ -459,6 +462,7 @@ function startFakeAniList() {
     const { query, variables } = JSON.parse(Buffer.concat(chunks).toString())
     const subject = { id: 321, type: 'ANIME', title: { native: 'テストアニメ', english: 'E2E Anime' }, startDate: { year: 2026, month: 7, day: 1 } }
     if (query.includes('SearchAnime')) return response.end(JSON.stringify({ data: { Page: { media: [subject] } } }))
+    if (query.includes('AnimeCandidates')) return response.end(JSON.stringify({ data: { Page: { media: variables.ids.map(id => ({ ...subject, id })) } } }))
     if (query.includes('AnimeSubject') && variables.id === 321) return response.end(JSON.stringify({ data: { Media: subject } }))
     if (query.includes('AiringEpisodes')) {
       response.end(JSON.stringify({ data: { Page: { pageInfo: { hasNextPage: false }, airingSchedules:

@@ -3,6 +3,9 @@ const path = require('node:path')
 const initSqlJs = require('sql.js')
 
 const schema = `
+CREATE TABLE IF NOT EXISTS anime_name_catalog (source TEXT PRIMARY KEY, content TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS anime_link_preferences (anime_source_id INTEGER PRIMARY KEY, auto_link INTEGER NOT NULL DEFAULT 1,
+ FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS anime_sources (
  id INTEGER PRIMARY KEY AUTOINCREMENT, season TEXT NOT NULL, title TEXT NOT NULL,
  image_url TEXT, air_day TEXT, air_time TEXT, total_episodes INTEGER,

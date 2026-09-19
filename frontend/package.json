@@ -11,24 +11,25 @@
     "electron:dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder --win portable",
     "test:desktop-assets": "npm run build && node tests/desktop-assets.test.cjs",
-    "test:electron-main": "node --test tests/local-service.test.cjs tests/anilist-client.test.cjs tests/auto-launch.test.cjs tests/window-position.test.cjs tests/ball-input.test.cjs",
+    "test:electron-main": "node --test tests/local-service.test.cjs tests/anilist-client.test.cjs tests/anime-names.test.cjs tests/auto-launch.test.cjs tests/window-position.test.cjs tests/ball-input.test.cjs",
     "test:packaged": "node tests/packaged-smoke.cjs",
     "test:startup:windows": "node tests/auto-launch-windows.cjs",
     "test:e2e": "npm run build && node tests/desktop-assets.test.cjs && npm run test:electron-main && playwright test"
   },
   "dependencies": {
     "cheerio": "1.0.0",
+    "opencc-js": "^1.4.2",
     "sql.js": "1.13.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.1",
+    "@vitejs/plugin-vue": "^5.2.4",
     "concurrently": "^9.2.1",
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
-    "wait-on": "^8.0.3",
-    "vue": "^3.5.17",
     "vite": "^5.4.19",
-    "@vitejs/plugin-vue": "^5.2.4"
+    "vue": "^3.5.17",
+    "wait-on": "^8.0.3"
   },
   "build": {
     "appId": "com.animelog.desktop",

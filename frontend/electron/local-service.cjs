@@ -1,6 +1,7 @@
 const { openDatabase } = require('./database.cjs')
 const { parseAnime } = require('./yuc-parser.cjs')
 const { createAniListClient } = require('./anilist-client.cjs')
+const { createAnimeNames } = require('./anime-names.cjs')
 const { calculateProgress, shanghaiDate, shanghaiHour } = require('./broadcast-progress.cjs')
 const camel = row => row && Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), value]))
 const statuses = ['watching', 'completed', 'dropped']
@@ -38,11 +39,12 @@ async function readRemote(url, { maxBytes, fetcher = fetch, headers = {} }) {
   } finally { await reader.cancel() }
   return { bytes: Buffer.concat(chunks), type: response.headers.get('content-type') || '' }
 }
-async function createService({ filename, migrationPath, baseUrl = 'https://yuc.wiki', anilistUrl = 'https://graphql.anilist.co', fetcher = fetch, clock = () => new Date() }) {
+async function createService({ filename, migrationPath, baseUrl = 'https://yuc.wiki', anilistUrl = 'https://graphql.anilist.co', fetcher = fetch, clock = () => new Date(), nameCatalogUpdates = false }) {
   const db = await openDatabase(filename, migrationPath)
   const abortController = new AbortController()
   let closed = false
   const anilist = createAniListClient({ fetcher, url: anilistUrl, signal: abortController.signal, clock })
+  const names = createAnimeNames({ db, client: anilist, fetcher, clock, signal: abortController.signal })
   const one = (sql, params) => db.rows(sql, params)[0]
   const anime = id => camel(one('SELECT * FROM anime_sources WHERE id = ?', [id]))
   const requireAnime = id => anime(id) || fail('番剧不存在', 404)
@@ -70,6 +72,17 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
   const broadcastPending = new Map()
   const broadcastGeneration = new Map()
   let lastManualBroadcastRefresh = 0
+  const autoAttempts = new Map()
+  async function autoLink(id) {
+    if (closed || binding(id) || one('SELECT auto_link FROM anime_link_preferences WHERE anime_source_id=?', [id])?.auto_link === 0) return
+    if (one('SELECT status FROM watch_records WHERE anime_source_id=?', [id])?.status !== 'watching') return
+    if (autoAttempts.has(id) && clock().getTime() - autoAttempts.get(id) < 3600000) return
+    autoAttempts.set(id, clock().getTime())
+    const subjectId = names.exactId(anime(id)?.title || '')
+    if (!subjectId) return
+    const generation = broadcastGeneration.get(id) || 0
+    try { await request('PUT', `/api/anime/${id}/broadcast-binding`, { anilistSubjectId: subjectId }, generation) } catch {}
+  }
   async function refresh(season) {
     if (pending.has(season)) return pending.get(season)
     const promise = (async () => {
@@ -146,6 +159,14 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     try { return await promise } finally { broadcastPending.delete(pendingKey) }
   }
   async function refreshBroadcasts({ force = false, animeSourceId = null } = {}) {
+    if (nameCatalogUpdates) void names.update().catch(() => {})
+    const unlinked = db.rows(`SELECT w.anime_source_id FROM watch_records w LEFT JOIN broadcast_bindings b ON b.anime_source_id=w.anime_source_id WHERE w.status='watching' AND b.anime_source_id IS NULL`)
+    let autoCursor = 0
+    async function linkWorker() {
+      while (!closed && autoCursor < unlinked.length) await autoLink(unlinked[autoCursor++].anime_source_id)
+    }
+    await Promise.all([linkWorker(), linkWorker()])
+    if (closed) return []
     let ids
     if (animeSourceId) ids = [animeSourceId]
     else ids = db.rows(`SELECT b.anime_source_id,b.last_success_at,b.next_retry_at
@@ -197,7 +218,7 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
       [disposition, clock().toISOString(), item.animeSourceId, item.providerEpisodeId, shanghaiDate(clock())])
     })
   }
-  async function request(method, target, body = {}) {
+  async function request(method, target, body = {}, autoGeneration = null) {
     const url = new URL(target, 'anime-log://local')
     const route = url.pathname
     if (method === 'GET' && route === '/api/seasons/current') return currentSeason()
@@ -207,13 +228,13 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
       const animeSourceId = body.animeSourceId == null ? null : integer(Number(body.animeSourceId), 1)
       return refreshBroadcasts({ force: true, animeSourceId })
     }
-    if (method === 'GET' && route === '/api/anilist/search') {
-      try { return await anilist.search(url.searchParams.get('keyword')) }
+    if (method === 'GET' && ['/api/anime/search', '/api/anilist/search'].includes(route)) {
+      try { return await names.search(url.searchParams.get('keyword')) }
       catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
     }
     const anilistSubject = route.match(/^\/api\/anilist\/subjects\/(\d+)$/)
     if (method === 'GET' && anilistSubject) {
-      try { return await anilist.subject(integer(Number(anilistSubject[1]), 1)) }
+      try { return names.decorate(await anilist.subject(integer(Number(anilistSubject[1]), 1))) }
       catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
     }
     const broadcastBinding = route.match(/^\/api\/anime\/(\d+)\/broadcast-binding$/)
@@ -223,6 +244,7 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
       if (method === 'DELETE') {
         broadcastGeneration.set(animeSourceId, (broadcastGeneration.get(animeSourceId) || 0) + 1)
         db.write(() => {
+          db.run('INSERT INTO anime_link_preferences VALUES (?,0) ON CONFLICT(anime_source_id) DO UPDATE SET auto_link=0', [animeSourceId])
           db.run('DELETE FROM broadcast_episodes WHERE anime_source_id = ?', [animeSourceId])
           db.run('DELETE FROM broadcast_alerts WHERE anime_source_id = ?', [animeSourceId])
           db.run('DELETE FROM broadcast_bindings WHERE anime_source_id = ?', [animeSourceId])
@@ -232,14 +254,17 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
       if (method === 'PUT') {
         const subjectId = integer(Number(body.anilistSubjectId), 1)
         let subject
-        try { subject = await anilist.subject(subjectId) }
+        try { subject = names.decorate(await anilist.subject(subjectId)) }
         catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
+        if (closed) fail('应用正在退出', 503)
+        if (autoGeneration !== null && (binding(animeSourceId) || (broadcastGeneration.get(animeSourceId) || 0) !== autoGeneration || one('SELECT status FROM watch_records WHERE anime_source_id=?', [animeSourceId])?.status !== 'watching')) return null
         const notifyEnabled = body.notifyEnabled !== false ? 1 : 0
         const now = new Date().toISOString()
         const previousBinding = binding(animeSourceId)
         const sameSubject = previousBinding?.provider === 'anilist' && previousBinding.providerSubjectId === subjectId
         if (!sameSubject) broadcastGeneration.set(animeSourceId, (broadcastGeneration.get(animeSourceId) || 0) + 1)
         db.write(() => {
+          db.run('INSERT INTO anime_link_preferences VALUES (?,1) ON CONFLICT(anime_source_id) DO UPDATE SET auto_link=1', [animeSourceId])
           if (!sameSubject) {
             db.run('DELETE FROM broadcast_episodes WHERE anime_source_id = ?', [animeSourceId])
             db.run('DELETE FROM broadcast_alerts WHERE anime_source_id = ?', [animeSourceId])
@@ -283,6 +308,7 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
         db.write(() => db.run(`INSERT INTO watch_records (anime_source_id,status,watched_episodes,created_at,updated_at)
           VALUES (?,?,?,?,?) ON CONFLICT(anime_source_id) DO UPDATE SET status=excluded.status,
           watched_episodes=excluded.watched_episodes,updated_at=excluded.updated_at`, [id, status, episodes, now, now]))
+        await autoLink(id)
         return record(one('SELECT * FROM watch_records WHERE anime_source_id = ?', [id]))
       }
     }
@@ -297,6 +323,7 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
         if (!statuses.includes(status)) fail('追番状态无效')
         const episodes = integer(body.watchedEpisodes ?? previous.watched_episodes)
         db.write(() => db.run('UPDATE watch_records SET status=?,watched_episodes=?,updated_at=? WHERE id=?', [status, episodes, new Date().toISOString(), id]))
+        await autoLink(previous.anime_source_id)
         return record(one('SELECT * FROM watch_records WHERE id = ?', [id]))
       }
     }

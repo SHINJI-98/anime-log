@@ -108,13 +108,13 @@
                     <span>原 Bangumi 关联需要重新选择条目</span>
                   </template>
                   <template v-else>
-                  <strong v-if="record.broadcast.estimatedAiredEpisode !== null">按排期预计已播至第 {{ formatEpisode(record.broadcast.estimatedAiredEpisode) }} 集</strong>
+                  <strong v-if="record.broadcast.estimatedAiredEpisode !== null">预计播至第 {{ formatEpisode(record.broadcast.estimatedAiredEpisode) }} 集</strong>
                   <strong v-else>放送进度未知</strong>
-                  <span v-if="record.broadcast.todayEpisodes.length">今日预计播出第 {{ episodeList(record.broadcast.todayEpisodes) }} 集</span>
-                  <span v-else-if="record.broadcast.next">第 {{ episodeList(record.broadcast.next.episodes) }} 集预计 {{ formatAirDate(record.broadcast.next.date) }} 播出</span>
+                  <span v-if="record.broadcast.todayEpisodes.length">今日预计第 {{ episodeList(record.broadcast.todayEpisodes) }} 集</span>
+                  <span v-else-if="record.broadcast.next">预计第 {{ episodeList(record.broadcast.next.episodes) }} 集 · {{ formatAirDate(record.broadcast.next.date) }}</span>
                   <span v-else>下一集排期未知</span>
                   <small :class="{ 'sync-error': record.broadcast.error }">
-                    数据来源：AniList<span v-if="record.broadcast.lastSuccessAt"> · 最近同步 {{ formatSyncTime(record.broadcast.lastSuccessAt) }}</span><span v-if="record.broadcast.error"> · 同步失败，数据可能过期</span>
+                    AniList<span v-if="record.broadcast.lastSuccessAt"> · {{ formatSyncTime(record.broadcast.lastSuccessAt) }} 同步</span><span v-if="record.broadcast.error"> · 同步失败，可能过期</span>
                   </small>
                   <em v-if="record.broadcast.hasUnwatchedUpdate">有待看更新</em>
                   </template>
@@ -417,7 +417,7 @@
       <div class="binding-dialog" @click.stop>
         <header><div><p class="eyebrow">放送排期</p><h2>关联 AniList</h2></div><button class="ghost" aria-label="关闭关联窗口" @click="closeBroadcastBinding">×</button></header>
         <p>为“{{ bindingRecord.anime.title }}”选择对应动画条目。关联后会自动同步预计放送进度。</p>
-        <p>中文标题未找到时，请尝试日文、英文或罗马字标题，也可使用 AniList 动画链接。</p>
+        <p>在看番剧会按唯一精确中文名称自动关联。这里可搜索简体、繁体及别名，或输入 AniList 动画链接更换关联。</p>
         <form class="binding-search" @submit.prevent="runAniListSearch">
           <input v-model.trim="bindingQuery" data-testid="anilist-search-input" maxlength="120" placeholder="番剧标题" />
           <button class="primary" :disabled="bindingBusy">搜索</button>
@@ -426,7 +426,7 @@
         <div v-if="bindingCandidates.length" class="binding-candidates">
           <article v-for="candidate in bindingCandidates" :key="candidate.id">
             <img :src="candidate.imageUrl || fallbackPoster" :alt="candidate.displayName || candidate.name" @error="useFallbackPoster" />
-            <div><strong>{{ candidate.displayName || candidate.name }}</strong><small v-if="candidate.displayName && candidate.name">{{ candidate.name }}</small><span>{{ candidate.airDate || '首播日期未知' }} · ID {{ candidate.id }}</span></div>
+            <div><strong>{{ candidate.displayName || candidate.name }}</strong><small v-if="candidate.displayName && candidate.name">{{ candidate.name }}</small><span>{{ candidate.airDate || '首播日期未知' }} · ID {{ candidate.id }}</span><small v-if="candidate.metadataUnavailable">AniList 暂不可用，显示本地名称；关联时会重新核验。</small></div>
             <button class="primary compact" data-testid="bind-anilist-candidate" :disabled="bindingBusy" @click="bindAniList(candidate.id)">确认关联</button>
           </article>
         </div>
@@ -436,7 +436,7 @@
           <button :disabled="bindingBusy">使用链接或 ID</button>
         </form>
         <label v-if="bindingRecord.broadcast && !bindingRecord.broadcast.requiresRelink" class="binding-notify"><input type="checkbox" :disabled="bindingBusy" :checked="bindingRecord.broadcast.notifyEnabled" @change="toggleRecordNotification($event.target.checked)" />此番剧允许系统通知</label>
-        <button v-if="bindingRecord.broadcast" class="ghost danger" data-testid="unbind-anilist" :disabled="bindingBusy" @click="unbindAniList">解除关联</button>
+        <button v-if="bindingRecord.broadcast" class="ghost danger" data-testid="unbind-anilist" :disabled="bindingBusy" @click="unbindAniList">解除关联并停止自动关联</button>
       </div>
     </div>
   </main>

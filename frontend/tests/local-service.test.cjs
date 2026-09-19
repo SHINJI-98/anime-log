@@ -15,6 +15,53 @@ const page = items => graphql({ Page: { pageInfo: { hasNextPage: false }, airing
 function card(title = '测试番剧', episodes = '全12话') {
   return `<div><div><div class="div_date_"><img data-src="http://i0.hdslb.com/a.jpg"><p class="imgtext5">23:00</p></div><div><table><tr><td class="date_title_">${title}</td></tr><tr><td>${episodes}</td></tr></table></div></div></div>`
 }
+
+test('unique Chinese titles auto-link, manual unlink persists, and late auto-link cannot undo unlink', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-auto-link-'))
+  let hold = false
+  let release
+  let started
+  const fetcher = async (_url, options) => {
+    if (!options?.body) return new Response(card('葬送的芙莉莲'))
+    const { query, variables } = JSON.parse(options.body)
+    if (query.includes('AnimeSubject')) {
+      if (hold) { started(); await new Promise(resolve => { release = resolve }) }
+      return graphql({ Media: media(variables.id) })
+    }
+    if (query.includes('AnimeCandidates')) return graphql({ Page: { media: variables.ids.map(media) } })
+    return page([schedule(154587, 1, 1, '2026-09-18')])
+  }
+  const options = { filename: path.join(dir, 'test.db'), fetcher }
+  let service = await createService(options)
+  t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
+  const anime = (await service.request('GET', '/api/anime?season=202607'))[0]
+  const record = await service.request('POST', '/api/watch-records', { animeSourceId: anime.id, watchedEpisodes: 5 })
+  assert.equal(record.broadcast.subject.id, 154587)
+  assert.equal(record.watchedEpisodes, 5)
+  assert.equal((await service.request('GET', '/api/anime/search?keyword=葬送的芙莉莲'))[0].id, 154587)
+  await service.request('DELETE', `/api/anime/${anime.id}/broadcast-binding`)
+  service.close()
+  service = await createService(options)
+  await service.refreshBroadcasts()
+  assert.equal((await service.request('GET', '/api/watch-records'))[0].broadcast, null)
+  // A fresh title has no opt-out; unlink while verification is pending must win.
+  const db = await openDatabase(path.join(dir, 'race.db'))
+  db.write(() => {
+    db.run("INSERT INTO anime_sources VALUES (1,'202607','葬送的芙莉莲',NULL,NULL,NULL,28,'test','now','now')")
+    db.run("INSERT INTO watch_records VALUES (1,1,'watching',2,'now','now')")
+  })
+  db.close()
+  const raceService = await createService({ ...options, filename: path.join(dir, 'race.db') })
+  hold = true
+  const waiting = new Promise(resolve => { started = resolve })
+  const refresh = raceService.refreshBroadcasts()
+  await waiting
+  await raceService.request('DELETE', '/api/anime/1/broadcast-binding')
+  release()
+  await refresh
+  assert.equal((await raceService.request('GET', '/api/watch-records'))[0].broadcast, null)
+  raceService.close()
+})
 test('parser preserves Java source IDs, weekday, images, episode count and fallback cards', () => {
   const url = 'https://yuc.wiki/202607/'
   const results = parseAnime('<div class="date2">周一 (月)</div>' + card() + '<div class="date2">网络放送 &amp; 其他</div>' + card('Other', ''), url)

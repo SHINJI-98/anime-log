@@ -101,7 +101,7 @@ export function deleteEpisodeNote(animeSourceId, episodeNumber) {
 }
 
 export function searchAniList(keyword) {
-  return request(`/api/anilist/search?keyword=${encodeURIComponent(keyword)}`)
+  return request(`/api/anime/search?keyword=${encodeURIComponent(keyword)}`)
 }
 
 export function getAniListSubject(id) {
