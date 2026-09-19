@@ -7,7 +7,7 @@ function createBroadcastScheduler({ service, powerMonitor, onUpdated, intervalMs
       onUpdated?.(results)
       return results
     }).catch(error => {
-      console.error('同步 Bangumi 放送进度失败:', error.message)
+      console.error('同步 AniList 放送进度失败:', error.message)
       return []
     }).finally(() => { running = null })
     return running

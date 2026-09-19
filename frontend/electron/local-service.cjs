@@ -1,6 +1,6 @@
 const { openDatabase } = require('./database.cjs')
 const { parseAnime } = require('./yuc-parser.cjs')
-const { createBangumiClient } = require('./bangumi-client.cjs')
+const { createAniListClient } = require('./anilist-client.cjs')
 const { calculateProgress, shanghaiDate, shanghaiHour } = require('./broadcast-progress.cjs')
 const camel = row => row && Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), value]))
 const statuses = ['watching', 'completed', 'dropped']
@@ -38,11 +38,11 @@ async function readRemote(url, { maxBytes, fetcher = fetch, headers = {} }) {
   } finally { await reader.cancel() }
   return { bytes: Buffer.concat(chunks), type: response.headers.get('content-type') || '' }
 }
-async function createService({ filename, migrationPath, baseUrl = 'https://yuc.wiki', bangumiBaseUrl = 'https://api.bgm.tv', fetcher = fetch, clock = () => new Date() }) {
+async function createService({ filename, migrationPath, baseUrl = 'https://yuc.wiki', anilistUrl = 'https://graphql.anilist.co', fetcher = fetch, clock = () => new Date() }) {
   const db = await openDatabase(filename, migrationPath)
   const abortController = new AbortController()
   let closed = false
-  const bangumi = createBangumiClient({ fetcher, baseUrl: bangumiBaseUrl, signal: abortController.signal })
+  const anilist = createAniListClient({ fetcher, url: anilistUrl, signal: abortController.signal, clock })
   const one = (sql, params) => db.rows(sql, params)[0]
   const anime = id => camel(one('SELECT * FROM anime_sources WHERE id = ?', [id]))
   const requireAnime = id => anime(id) || fail('番剧不存在', 404)
@@ -51,12 +51,14 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
   function broadcast(animeSourceId, watchedEpisodes = 0) {
     const linked = binding(animeSourceId)
     if (!linked) return null
-    const progress = calculateProgress(episodeRows(animeSourceId), clock())
+    const requiresRelink = linked.provider !== 'anilist'
+    const progress = calculateProgress(requiresRelink ? [] : episodeRows(animeSourceId), clock())
     return {
-      subject: { id: linked.bangumiSubjectId, name: linked.subjectName, nameCn: linked.subjectNameCn,
+      provider: linked.provider, requiresRelink,
+      subject: { id: linked.providerSubjectId, name: linked.subjectName, displayName: linked.subjectDisplayName,
         imageUrl: linked.subjectImageUrl, airDate: linked.subjectAirDate },
       notifyEnabled: linked.notifyEnabled === 1,
-      lastAttemptAt: linked.lastAttemptAt, lastSuccessAt: linked.lastSuccessAt, error: linked.lastError,
+      lastAttemptAt: linked.lastAttemptAt, lastSuccessAt: requiresRelink ? null : linked.lastSuccessAt, error: requiresRelink ? null : linked.lastError,
       stale: !linked.lastSuccessAt || clock().getTime() - Date.parse(linked.lastSuccessAt) >= 24 * 3600000,
       ...progress,
       hasUnwatchedUpdate: progress.estimatedAiredEpisode !== null && progress.estimatedAiredEpisode > watchedEpisodes
@@ -103,37 +105,38 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     const pendingKey = `${animeSourceId}:${generation}`
     if (broadcastPending.has(pendingKey)) return broadcastPending.get(pendingKey)
     const linked = binding(animeSourceId)
-    if (!linked) fail('番剧尚未关联 Bangumi', 404)
-    const subjectId = linked.bangumiSubjectId
+    if (closed) fail('应用正在退出', 503)
+    if (!linked || linked.provider !== 'anilist') fail('请先关联 AniList 条目', 409)
+    const subjectId = linked.providerSubjectId
     const attemptedAt = clock().toISOString()
     db.write(() => db.run('UPDATE broadcast_bindings SET last_attempt_at=?,updated_at=? WHERE anime_source_id=?', [attemptedAt, attemptedAt, animeSourceId]))
     const promise = (async () => {
       try {
-        const episodes = await bangumi.episodes(subjectId)
+        const episodes = await anilist.episodes(subjectId)
         if (closed || (broadcastGeneration.get(animeSourceId) || 0) !== generation) return null
         const current = binding(animeSourceId)
-        if (!current || current.bangumiSubjectId !== subjectId) return null
+        if (!current || current.provider !== 'anilist' || current.providerSubjectId !== subjectId) return null
         const successAt = clock().toISOString()
         db.write(() => {
           db.run('DELETE FROM broadcast_episodes WHERE anime_source_id = ?', [animeSourceId])
           for (const item of episodes) {
             if (!Number.isSafeInteger(item.id) || item.type !== 0 || !Number.isFinite(item.sortNumber)) continue
             db.run(`INSERT INTO broadcast_episodes
-              (bangumi_episode_id,anime_source_id,episode_type,episode_number,sort_number,name,name_cn,air_date)
-              VALUES (?,?,?,?,?,?,?,?)`, [item.id, animeSourceId, item.type, item.episodeNumber, item.sortNumber, item.name, item.nameCn, item.airDate])
+              (provider_episode_id,anime_source_id,episode_type,episode_number,sort_number,name,name_cn,air_date)
+              VALUES (?,?,?,?,?,?,?,?)`, [item.id, animeSourceId, item.type, item.episodeNumber, item.sortNumber, item.name, item.displayName, item.airDate])
           }
           db.run(`UPDATE broadcast_bindings SET last_success_at=?,last_error=NULL,failure_count=0,next_retry_at=NULL,updated_at=?
-            WHERE anime_source_id=? AND bangumi_subject_id=?`, [successAt, successAt, animeSourceId, subjectId])
+            WHERE anime_source_id=? AND provider_subject_id=?`, [successAt, successAt, animeSourceId, subjectId])
         })
         return broadcast(animeSourceId)
       } catch (error) {
         const current = closed ? null : binding(animeSourceId)
-        if (current && current.bangumiSubjectId === subjectId) {
+        if (current?.provider === 'anilist' && current.providerSubjectId === subjectId && (broadcastGeneration.get(animeSourceId) || 0) === generation) {
           const failures = Math.min(3, (current.failureCount || 0) + 1)
-          const retrySeconds = error.retryAfter || [300, 900, 3600][failures - 1]
+          const retrySeconds = error.retryAfter ?? [300, 900, 3600][failures - 1]
           const retryAt = new Date(clock().getTime() + retrySeconds * 1000).toISOString()
           db.write(() => db.run(`UPDATE broadcast_bindings SET last_error=?,failure_count=?,next_retry_at=?,updated_at=?
-            WHERE anime_source_id=? AND bangumi_subject_id=?`,
+            WHERE anime_source_id=? AND provider_subject_id=?`,
           [error.message, failures, retryAt, clock().toISOString(), animeSourceId, subjectId]))
         }
         throw error
@@ -146,7 +149,7 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     let ids
     if (animeSourceId) ids = [animeSourceId]
     else ids = db.rows(`SELECT b.anime_source_id,b.last_success_at,b.next_retry_at
-      FROM broadcast_bindings b JOIN watch_records w ON w.anime_source_id=b.anime_source_id WHERE w.status='watching'`)
+      FROM broadcast_bindings b JOIN watch_records w ON w.anime_source_id=b.anime_source_id WHERE w.status='watching' AND b.provider='anilist'`)
       .filter(row => force || (row.next_retry_at
         ? Date.parse(row.next_retry_at) <= clock().getTime()
         : !row.last_success_at || clock().getTime() - Date.parse(row.last_success_at) >= 3600000))
@@ -154,7 +157,7 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     const results = []
     let cursor = 0
     async function worker() {
-      while (cursor < ids.length) {
+      while (!closed && cursor < ids.length) {
         const id = ids[cursor++]
         try { results.push({ animeSourceId: id, broadcast: await refreshBroadcast(id) }) }
         catch (error) { results.push({ animeSourceId: id, error: error.message }) }
@@ -167,21 +170,21 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     if (shanghaiHour(clock()) < 9) return []
     const today = shanghaiDate(clock())
     const freshAfter = new Date(clock().getTime() - 24 * 3600000).toISOString()
-    const candidates = db.rows(`SELECT e.anime_source_id,e.bangumi_episode_id,e.episode_number,a.title,b.notify_enabled
+    const candidates = db.rows(`SELECT e.anime_source_id,e.provider_episode_id,e.episode_number,a.title,b.notify_enabled
       FROM broadcast_episodes e
       JOIN broadcast_bindings b ON b.anime_source_id=e.anime_source_id
       JOIN anime_sources a ON a.id=e.anime_source_id
       JOIN watch_records w ON w.anime_source_id=e.anime_source_id
-      WHERE e.episode_type=0 AND e.air_date=? AND w.status='watching' AND b.last_success_at>=?
+      WHERE e.episode_type=0 AND e.air_date=? AND w.status='watching' AND b.provider='anilist' AND b.last_success_at>=?
       AND NOT EXISTS (SELECT 1 FROM broadcast_alerts x WHERE x.anime_source_id=e.anime_source_id
-        AND x.bangumi_episode_id=e.bangumi_episode_id AND x.alert_type='scheduled_today' AND x.schedule_date=?)
+        AND x.provider_episode_id=e.provider_episode_id AND x.alert_type='scheduled_today' AND x.schedule_date=?)
       ORDER BY a.title,e.sort_number`, [today, freshAfter, today])
     if (!candidates.length) return []
     const handledAt = clock().toISOString()
     db.write(() => {
       for (const item of candidates) db.run(`INSERT INTO broadcast_alerts
-        (anime_source_id,bangumi_episode_id,alert_type,schedule_date,handled_at,disposition) VALUES (?,?,?,?,?,?)`,
-      [item.anime_source_id, item.bangumi_episode_id, 'scheduled_today', today, handledAt,
+        (anime_source_id,provider_episode_id,alert_type,schedule_date,handled_at,disposition) VALUES (?,?,?,?,?,?)`,
+      [item.anime_source_id, item.provider_episode_id, 'scheduled_today', today, handledAt,
         notificationsEnabled && item.notify_enabled === 1 ? 'pending' : 'silent'])
     })
     return candidates.filter(item => notificationsEnabled && item.notify_enabled === 1).map(camel)
@@ -190,8 +193,8 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     if (!['delivered', 'failed'].includes(disposition)) return
     db.write(() => {
       for (const item of items) db.run(`UPDATE broadcast_alerts SET disposition=?,handled_at=?
-        WHERE anime_source_id=? AND bangumi_episode_id=? AND alert_type='scheduled_today' AND schedule_date=?`,
-      [disposition, clock().toISOString(), item.animeSourceId, item.bangumiEpisodeId, shanghaiDate(clock())])
+        WHERE anime_source_id=? AND provider_episode_id=? AND alert_type='scheduled_today' AND schedule_date=?`,
+      [disposition, clock().toISOString(), item.animeSourceId, item.providerEpisodeId, shanghaiDate(clock())])
     })
   }
   async function request(method, target, body = {}) {
@@ -204,13 +207,13 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
       const animeSourceId = body.animeSourceId == null ? null : integer(Number(body.animeSourceId), 1)
       return refreshBroadcasts({ force: true, animeSourceId })
     }
-    if (method === 'GET' && route === '/api/bangumi/search') {
-      try { return await bangumi.search(url.searchParams.get('keyword')) }
+    if (method === 'GET' && route === '/api/anilist/search') {
+      try { return await anilist.search(url.searchParams.get('keyword')) }
       catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
     }
-    const bangumiSubject = route.match(/^\/api\/bangumi\/subjects\/(\d+)$/)
-    if (method === 'GET' && bangumiSubject) {
-      try { return await bangumi.subject(integer(Number(bangumiSubject[1]), 1)) }
+    const anilistSubject = route.match(/^\/api\/anilist\/subjects\/(\d+)$/)
+    if (method === 'GET' && anilistSubject) {
+      try { return await anilist.subject(integer(Number(anilistSubject[1]), 1)) }
       catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
     }
     const broadcastBinding = route.match(/^\/api\/anime\/(\d+)\/broadcast-binding$/)
@@ -219,18 +222,22 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
       requireAnime(animeSourceId)
       if (method === 'DELETE') {
         broadcastGeneration.set(animeSourceId, (broadcastGeneration.get(animeSourceId) || 0) + 1)
-        db.write(() => db.run('DELETE FROM broadcast_bindings WHERE anime_source_id = ?', [animeSourceId]))
+        db.write(() => {
+          db.run('DELETE FROM broadcast_episodes WHERE anime_source_id = ?', [animeSourceId])
+          db.run('DELETE FROM broadcast_alerts WHERE anime_source_id = ?', [animeSourceId])
+          db.run('DELETE FROM broadcast_bindings WHERE anime_source_id = ?', [animeSourceId])
+        })
         return null
       }
       if (method === 'PUT') {
-        const subjectId = integer(Number(body.bangumiSubjectId), 1)
+        const subjectId = integer(Number(body.anilistSubjectId), 1)
         let subject
-        try { subject = await bangumi.subject(subjectId) }
+        try { subject = await anilist.subject(subjectId) }
         catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
         const notifyEnabled = body.notifyEnabled !== false ? 1 : 0
         const now = new Date().toISOString()
         const previousBinding = binding(animeSourceId)
-        const sameSubject = previousBinding?.bangumiSubjectId === subjectId
+        const sameSubject = previousBinding?.provider === 'anilist' && previousBinding.providerSubjectId === subjectId
         if (!sameSubject) broadcastGeneration.set(animeSourceId, (broadcastGeneration.get(animeSourceId) || 0) + 1)
         db.write(() => {
           if (!sameSubject) {
@@ -238,14 +245,16 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
             db.run('DELETE FROM broadcast_alerts WHERE anime_source_id = ?', [animeSourceId])
           }
           db.run(`INSERT INTO broadcast_bindings
-            (anime_source_id,bangumi_subject_id,subject_name,subject_name_cn,subject_image_url,subject_air_date,notify_enabled,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(anime_source_id) DO UPDATE SET
-            bangumi_subject_id=excluded.bangumi_subject_id,subject_name=excluded.subject_name,subject_name_cn=excluded.subject_name_cn,
+            (anime_source_id,provider,provider_subject_id,subject_name,subject_display_name,subject_image_url,subject_air_date,notify_enabled,created_at,updated_at)
+            VALUES (?,'anilist',?,?,?,?,?,?,?,?) ON CONFLICT(anime_source_id) DO UPDATE SET
+            provider=excluded.provider,provider_subject_id=excluded.provider_subject_id,subject_name=excluded.subject_name,subject_display_name=excluded.subject_display_name,
             subject_image_url=excluded.subject_image_url,subject_air_date=excluded.subject_air_date,notify_enabled=excluded.notify_enabled,
-            last_attempt_at=CASE WHEN bangumi_subject_id=excluded.bangumi_subject_id THEN last_attempt_at ELSE NULL END,
-            last_success_at=CASE WHEN bangumi_subject_id=excluded.bangumi_subject_id THEN last_success_at ELSE NULL END,
-            last_error=CASE WHEN bangumi_subject_id=excluded.bangumi_subject_id THEN last_error ELSE NULL END,updated_at=excluded.updated_at`,
-          [animeSourceId, subject.id, subject.name, subject.nameCn, subject.imageUrl, subject.airDate, notifyEnabled, now, now])
+            last_attempt_at=CASE WHEN provider=excluded.provider AND provider_subject_id=excluded.provider_subject_id THEN last_attempt_at ELSE NULL END,
+            last_success_at=CASE WHEN provider=excluded.provider AND provider_subject_id=excluded.provider_subject_id THEN last_success_at ELSE NULL END,
+            last_error=CASE WHEN provider=excluded.provider AND provider_subject_id=excluded.provider_subject_id THEN last_error ELSE NULL END,
+            failure_count=CASE WHEN provider=excluded.provider AND provider_subject_id=excluded.provider_subject_id THEN failure_count ELSE 0 END,
+            next_retry_at=CASE WHEN provider=excluded.provider AND provider_subject_id=excluded.provider_subject_id THEN next_retry_at ELSE NULL END,updated_at=excluded.updated_at`,
+          [animeSourceId, subject.id, subject.name, subject.displayName, subject.imageUrl, subject.airDate, notifyEnabled, now, now])
         })
         try { await refreshBroadcast(animeSourceId) } catch {}
         return broadcast(animeSourceId)

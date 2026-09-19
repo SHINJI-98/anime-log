@@ -62,7 +62,7 @@ async function startLocalService() {
       ? path.resolve(__dirname, '../../backend/data/anime-log.db')
       : undefined),
     baseUrl: process.env.ANIME_LOG_YUC_BASE_URL || 'https://yuc.wiki',
-    bangumiBaseUrl: process.env.ANIME_LOG_BANGUMI_BASE_URL || 'https://api.bgm.tv'
+    anilistUrl: process.env.ANIME_LOG_ANILIST_URL || 'https://graphql.anilist.co'
   })
   protocol.handle('anime-log', async request => {
     const headers = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
@@ -125,7 +125,7 @@ function deliverBroadcastAlerts() {
   const anime = [...new Map(alerts.map(item => [item.animeSourceId, item])).values()]
   const title = anime.length === 1 ? `${anime[0].title} 今日更新` : `今日有 ${anime.length} 部番剧预计更新`
   const body = anime.length === 1
-    ? `按 Bangumi 排期，今日预计播出第 ${alerts.map(item => item.episodeNumber).join('、')} 集`
+    ? `按 AniList 排期，今日预计播出第 ${alerts.map(item => item.episodeNumber).join('、')} 集`
     : anime.slice(0, 4).map(item => item.title).join('、') + (anime.length > 4 ? ` 等 ${anime.length} 部` : '')
   try {
     const notification = new Notification({ title, body, silent: false })

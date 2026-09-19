@@ -12,6 +12,8 @@ async function main() {
   const files = asar.listPackage(path.join(output, 'resources/app.asar'))
   assert(files.some(file => file.endsWith('sql-wasm.wasm')))
   assert(files.some(file => file.endsWith('app-icon.png')))
+  assert(files.some(file => file.endsWith('anilist-client.cjs')))
+  assert(!files.some(file => file.endsWith('bangumi-client.cjs')))
   assert(!files.some(file => /\.jar$|\.db$|node_modules[\\/]vite[\\/]/.test(file)))
   assert(!fs.existsSync(path.join(output, 'resources/backend')))
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-packaged-'))

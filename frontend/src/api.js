@@ -100,17 +100,17 @@ export function deleteEpisodeNote(animeSourceId, episodeNumber) {
   })
 }
 
-export function searchBangumi(keyword) {
-  return request(`/api/bangumi/search?keyword=${encodeURIComponent(keyword)}`)
+export function searchAniList(keyword) {
+  return request(`/api/anilist/search?keyword=${encodeURIComponent(keyword)}`)
 }
 
-export function getBangumiSubject(id) {
-  return request(`/api/bangumi/subjects/${encodeURIComponent(id)}`)
+export function getAniListSubject(id) {
+  return request(`/api/anilist/subjects/${encodeURIComponent(id)}`)
 }
 
-export function saveBroadcastBinding(animeSourceId, bangumiSubjectId, notifyEnabled = true) {
+export function saveBroadcastBinding(animeSourceId, anilistSubjectId, notifyEnabled = true) {
   return request(`/api/anime/${animeSourceId}/broadcast-binding`, {
-    method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ bangumiSubjectId, notifyEnabled })
+    method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ anilistSubjectId, notifyEnabled })
   })
 }
 

@@ -103,18 +103,24 @@
                   <strong>/ {{ record.anime.totalEpisodes || '?' }}</strong>
                 </div>
                 <div v-if="record.broadcast" class="broadcast-status" data-testid="broadcast-status">
+                  <template v-if="record.broadcast.requiresRelink">
+                    <strong>放送数据源已切换为 AniList</strong>
+                    <span>原 Bangumi 关联需要重新选择条目</span>
+                  </template>
+                  <template v-else>
                   <strong v-if="record.broadcast.estimatedAiredEpisode !== null">按排期预计已播至第 {{ formatEpisode(record.broadcast.estimatedAiredEpisode) }} 集</strong>
                   <strong v-else>放送进度未知</strong>
                   <span v-if="record.broadcast.todayEpisodes.length">今日预计播出第 {{ episodeList(record.broadcast.todayEpisodes) }} 集</span>
                   <span v-else-if="record.broadcast.next">第 {{ episodeList(record.broadcast.next.episodes) }} 集预计 {{ formatAirDate(record.broadcast.next.date) }} 播出</span>
                   <span v-else>下一集排期未知</span>
                   <small :class="{ 'sync-error': record.broadcast.error }">
-                    数据来源：Bangumi<span v-if="record.broadcast.lastSuccessAt"> · 最近同步 {{ formatSyncTime(record.broadcast.lastSuccessAt) }}</span><span v-if="record.broadcast.error"> · 同步失败，数据可能过期</span>
+                    数据来源：AniList<span v-if="record.broadcast.lastSuccessAt"> · 最近同步 {{ formatSyncTime(record.broadcast.lastSuccessAt) }}</span><span v-if="record.broadcast.error"> · 同步失败，数据可能过期</span>
                   </small>
                   <em v-if="record.broadcast.hasUnwatchedUpdate">有待看更新</em>
+                  </template>
                 </div>
                 <button v-if="desktopAvailable" class="ghost compact broadcast-binding-button" data-testid="open-broadcast-binding" @click="openBroadcastBinding(record)">
-                  {{ record.broadcast ? '更换 Bangumi 关联' : '关联 Bangumi' }}
+                  {{ record.broadcast && !record.broadcast.requiresRelink ? '更换 AniList 关联' : '关联 AniList' }}
                 </button>
                 <div class="card-actions watch-card-actions">
                   <button
@@ -407,29 +413,30 @@
         <p>{{ previewAnime.title }}</p>
       </div>
     </div>
-    <div v-if="bindingRecord" class="poster-modal" role="dialog" aria-modal="true" aria-label="关联 Bangumi" @click="closeBroadcastBinding">
+    <div v-if="bindingRecord" class="poster-modal" role="dialog" aria-modal="true" aria-label="关联 AniList" @click="closeBroadcastBinding">
       <div class="binding-dialog" @click.stop>
-        <header><div><p class="eyebrow">放送排期</p><h2>关联 Bangumi</h2></div><button class="ghost" aria-label="关闭关联窗口" @click="closeBroadcastBinding">×</button></header>
+        <header><div><p class="eyebrow">放送排期</p><h2>关联 AniList</h2></div><button class="ghost" aria-label="关闭关联窗口" @click="closeBroadcastBinding">×</button></header>
         <p>为“{{ bindingRecord.anime.title }}”选择对应动画条目。关联后会自动同步预计放送进度。</p>
-        <form class="binding-search" @submit.prevent="runBangumiSearch">
-          <input v-model.trim="bindingQuery" data-testid="bangumi-search-input" maxlength="120" placeholder="番剧标题" />
+        <p>中文标题未找到时，请尝试日文、英文或罗马字标题，也可使用 AniList 动画链接。</p>
+        <form class="binding-search" @submit.prevent="runAniListSearch">
+          <input v-model.trim="bindingQuery" data-testid="anilist-search-input" maxlength="120" placeholder="番剧标题" />
           <button class="primary" :disabled="bindingBusy">搜索</button>
         </form>
         <p v-if="bindingError" class="notice error">{{ bindingError }}</p>
         <div v-if="bindingCandidates.length" class="binding-candidates">
           <article v-for="candidate in bindingCandidates" :key="candidate.id">
-            <img :src="candidate.imageUrl || fallbackPoster" :alt="candidate.nameCn || candidate.name" @error="useFallbackPoster" />
-            <div><strong>{{ candidate.nameCn || candidate.name }}</strong><small v-if="candidate.nameCn && candidate.name">{{ candidate.name }}</small><span>{{ candidate.airDate || '首播日期未知' }} · ID {{ candidate.id }}</span></div>
-            <button class="primary compact" data-testid="bind-bangumi-candidate" :disabled="bindingBusy" @click="bindBangumi(candidate.id)">确认关联</button>
+            <img :src="candidate.imageUrl || fallbackPoster" :alt="candidate.displayName || candidate.name" @error="useFallbackPoster" />
+            <div><strong>{{ candidate.displayName || candidate.name }}</strong><small v-if="candidate.displayName && candidate.name">{{ candidate.name }}</small><span>{{ candidate.airDate || '首播日期未知' }} · ID {{ candidate.id }}</span></div>
+            <button class="primary compact" data-testid="bind-anilist-candidate" :disabled="bindingBusy" @click="bindAniList(candidate.id)">确认关联</button>
           </article>
         </div>
         <div v-else-if="bindingSearched && !bindingBusy" class="empty-state compact-empty">没有找到候选，可在下方输入条目链接或 ID。</div>
-        <form class="binding-manual" @submit.prevent="bindManualBangumi">
-          <input v-model.trim="manualBangumi" data-testid="bangumi-manual-input" placeholder="https://bgm.tv/subject/123 或 123" />
+        <form class="binding-manual" @submit.prevent="bindManualAniList">
+          <input v-model.trim="manualAniList" data-testid="anilist-manual-input" placeholder="https://anilist.co/anime/123 或 123" />
           <button :disabled="bindingBusy">使用链接或 ID</button>
         </form>
-        <label v-if="bindingRecord.broadcast" class="binding-notify"><input type="checkbox" :checked="bindingRecord.broadcast.notifyEnabled" @change="toggleRecordNotification($event.target.checked)" />此番剧允许系统通知</label>
-        <button v-if="bindingRecord.broadcast" class="ghost danger" data-testid="unbind-bangumi" :disabled="bindingBusy" @click="unbindBangumi">解除关联</button>
+        <label v-if="bindingRecord.broadcast && !bindingRecord.broadcast.requiresRelink" class="binding-notify"><input type="checkbox" :disabled="bindingBusy" :checked="bindingRecord.broadcast.notifyEnabled" @change="toggleRecordNotification($event.target.checked)" />此番剧允许系统通知</label>
+        <button v-if="bindingRecord.broadcast" class="ghost danger" data-testid="unbind-anilist" :disabled="bindingBusy" @click="unbindAniList">解除关联</button>
       </div>
     </div>
   </main>
@@ -451,10 +458,11 @@ import {
   getAnimeNotes,
   getCurrentSeason,
   getWatchRecords,
+  getAniListSubject,
   refreshBroadcast,
   refreshAnime,
   saveBroadcastBinding,
-  searchBangumi,
+  searchAniList,
   saveEpisodeNote,
   saveSummaryNote,
   updateWatchRecord
@@ -479,7 +487,7 @@ const bindingCandidates = ref([])
 const bindingBusy = ref(false)
 const bindingError = ref('')
 const bindingSearched = ref(false)
-const manualBangumi = ref('')
+const manualAniList = ref('')
 const unsubscribeBroadcast = window.animeLogDesktop?.onBroadcastUpdated(() => loadWatchRecords())
 const unsubscribeBroadcastFocus = window.animeLogDesktop?.onBroadcastFocus(async animeSourceId => {
   view.value = 'watchlist'
@@ -659,28 +667,28 @@ async function refreshBroadcasts() {
 
 async function openBroadcastBinding(record) {
   bindingRecord.value = record
-  bindingQuery.value = record.anime.title
+  bindingQuery.value = record.broadcast?.subject.name || record.anime.title
   bindingCandidates.value = []
   bindingError.value = ''
   bindingSearched.value = false
-  manualBangumi.value = record.broadcast ? String(record.broadcast.subject.id) : ''
-  await runBangumiSearch()
+  manualAniList.value = record.broadcast && !record.broadcast.requiresRelink ? String(record.broadcast.subject.id) : ''
+  await runAniListSearch()
 }
 
 function closeBroadcastBinding() {
   if (!bindingBusy.value) bindingRecord.value = null
 }
 
-async function runBangumiSearch() {
+async function runAniListSearch() {
   if (!bindingQuery.value) return
   bindingBusy.value = true
   bindingError.value = ''
-  try { bindingCandidates.value = await searchBangumi(bindingQuery.value); bindingSearched.value = true }
+  try { bindingCandidates.value = await searchAniList(bindingQuery.value); bindingSearched.value = true }
   catch (err) { bindingError.value = err.message }
   finally { bindingBusy.value = false }
 }
 
-async function bindBangumi(subjectId, notifyEnabled = true) {
+async function bindAniList(subjectId, notifyEnabled = bindingRecord.value?.broadcast?.notifyEnabled ?? true) {
   if (!bindingRecord.value) return
   bindingBusy.value = true
   bindingError.value = ''
@@ -692,13 +700,26 @@ async function bindBangumi(subjectId, notifyEnabled = true) {
   finally { bindingBusy.value = false }
 }
 
-function bindManualBangumi() {
-  const match = manualBangumi.value.match(/(?:subject\/)?(\d+)\/?$/)
-  if (!match) { bindingError.value = '请输入有效的 Bangumi 条目链接或 ID'; return }
-  return bindBangumi(Number(match[1]))
+async function bindManualAniList() {
+  let id = /^\d+$/.test(manualAniList.value) ? Number(manualAniList.value) : null
+  if (id === null) {
+    try {
+      const url = new URL(manualAniList.value)
+      const match = url.pathname.match(/^\/anime\/(\d+)(?:\/[^/]*)?\/?$/)
+      if (url.protocol === 'https:' && url.hostname === 'anilist.co' && !url.port && !url.username && !url.password && match) id = Number(match[1])
+    } catch {}
+  }
+  if (!Number.isSafeInteger(id) || id < 1) { bindingError.value = '请输入有效的 AniList 动画链接或 ID'; return }
+  bindingBusy.value = true
+  bindingError.value = ''
+  try {
+    bindingCandidates.value = [await getAniListSubject(id)]
+    bindingSearched.value = true
+  } catch (err) { bindingError.value = err.message }
+  finally { bindingBusy.value = false }
 }
 
-async function unbindBangumi() {
+async function unbindAniList() {
   if (!bindingRecord.value) return
   bindingBusy.value = true
   try {
@@ -723,7 +744,7 @@ async function toggleRecordNotification(enabled) {
 function formatEpisode(value) { return Number.isInteger(value) ? String(value) : String(Number(value)) }
 function episodeList(episodes) { return episodes.map(item => formatEpisode(item.episodeNumber)).join('、') }
 function formatAirDate(value) {
-  const [, month, day] = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/) || []
+  const [, , month, day] = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/) || []
   return month ? `${Number(month)} 月 ${Number(day)} 日` : value
 }
 function formatSyncTime(value) {

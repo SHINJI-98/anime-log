@@ -30,10 +30,10 @@ function calculateProgress(episodes, now = new Date()) {
   const nextDate = upcoming[0]?.airDate || null
   return {
     estimatedAiredEpisode: aired.length ? Math.max(...aired.map(item => item.episodeNumber)) : null,
-    todayEpisodes: todayEpisodes.map(item => ({ id: item.bangumiEpisodeId, episodeNumber: item.episodeNumber })),
+    todayEpisodes: todayEpisodes.map(item => ({ id: item.providerEpisodeId, episodeNumber: item.episodeNumber })),
     next: nextDate ? {
       date: nextDate,
-      episodes: upcoming.filter(item => item.airDate === nextDate).map(item => ({ id: item.bangumiEpisodeId, episodeNumber: item.episodeNumber }))
+      episodes: upcoming.filter(item => item.airDate === nextDate).map(item => ({ id: item.providerEpisodeId, episodeNumber: item.episodeNumber }))
     } : null
   }
 }

@@ -7,6 +7,10 @@ const { createService, currentSeason } = require('../electron/local-service.cjs'
 const { openDatabase } = require('../electron/database.cjs')
 const { parseAnime, javaHash } = require('../electron/yuc-parser.cjs')
 const { calculateProgress, shanghaiDate, validDate } = require('../electron/broadcast-progress.cjs')
+const media = id => ({ id, type: 'ANIME', title: { native: 'テスト', english: 'Test Anime' }, startDate: { year: 2026, month: 7, day: 1 } })
+const graphql = data => new Response(JSON.stringify({ data }))
+const schedule = (mediaId, id, episode, day) => ({ mediaId, id, episode, airingAt: Date.parse(`${day}T12:00:00+08:00`) / 1000 })
+const page = items => graphql({ Page: { pageInfo: { hasNextPage: false }, airingSchedules: items } })
 
 function card(title = '测试番剧', episodes = '全12话') {
   return `<div><div><div class="div_date_"><img data-src="http://i0.hdslb.com/a.jpg"><p class="imgtext5">23:00</p></div><div><table><tr><td class="date_title_">${title}</td></tr><tr><td>${episodes}</td></tr></table></div></div></div>`
@@ -41,11 +45,11 @@ test('season advances 14 days before next quarter including year rollover', () =
 test('broadcast progress uses Shanghai dates, excludes today from aired progress and keeps fractional episodes', () => {
   const now = new Date('2026-09-19T01:00:00Z')
   const episodes = [
-    { bangumiEpisodeId: 1, episodeType: 0, episodeNumber: 1, sortNumber: 1, airDate: '2026-09-18' },
-    { bangumiEpisodeId: 2, episodeType: 0, episodeNumber: 1.5, sortNumber: 1.5, airDate: '2026-09-19' },
-    { bangumiEpisodeId: 3, episodeType: 0, episodeNumber: 2, sortNumber: 2, airDate: '2026-09-20' },
-    { bangumiEpisodeId: 4, episodeType: 1, episodeNumber: 9, sortNumber: 9, airDate: '2026-09-17' },
-    { bangumiEpisodeId: 5, episodeType: 0, episodeNumber: 99, sortNumber: 99, airDate: 'not-a-date' }
+    { providerEpisodeId: 1, episodeType: 0, episodeNumber: 1, sortNumber: 1, airDate: '2026-09-18' },
+    { providerEpisodeId: 2, episodeType: 0, episodeNumber: 1.5, sortNumber: 1.5, airDate: '2026-09-19' },
+    { providerEpisodeId: 3, episodeType: 0, episodeNumber: 2, sortNumber: 2, airDate: '2026-09-20' },
+    { providerEpisodeId: 4, episodeType: 1, episodeNumber: 9, sortNumber: 9, airDate: '2026-09-17' },
+    { providerEpisodeId: 5, episodeType: 0, episodeNumber: 99, sortNumber: 99, airDate: 'not-a-date' }
   ]
   const result = calculateProgress(episodes, now)
   assert.equal(shanghaiDate(now), '2026-09-19')
@@ -94,21 +98,15 @@ test('local CRUD persists, refresh preserves followed/noted anime, validates and
   assert.deepEqual(await service.request('GET', '/api/watch-records'), [])
 })
 
-test('Bangumi search and confirmed binding persist without changing watch progress or notes', async t => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-bangumi-binding-'))
+test('AniList search and confirmed binding persist without changing watch progress or notes', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-anilist-binding-'))
   const requests = []
   const fetcher = async (url, options = {}) => {
     requests.push({ url: String(url), options })
-    if (String(url).includes('/v0/search/subjects')) return new Response(JSON.stringify({ data: [
-      { id: 123, type: 2, name: 'Test Anime', name_cn: '测试番剧', date: '2026-07-01', images: { common: 'https://lain.bgm.tv/pic.jpg' } },
-      { id: 999, type: 1, name: 'Book', name_cn: '书' }
-    ] }))
-    if (String(url).endsWith('/v0/subjects/123')) return new Response(JSON.stringify({
-      id: 123, type: 2, name: 'Test Anime', name_cn: '测试番剧', date: '2026-07-01', images: { common: 'https://lain.bgm.tv/pic.jpg' }
-    }))
-    if (String(url).includes('/v0/episodes')) return new Response(JSON.stringify({ total: 1, data: [
-      { id: 501, type: 0, ep: 1, sort: 1, name: 'Episode 1', name_cn: '第一集', airdate: '2026-07-02' }
-    ] }))
+    const query = options.body ? JSON.parse(options.body).query : ''
+    if (query.includes('SearchAnime')) return graphql({ Page: { media: [media(123)] } })
+    if (query.includes('AnimeSubject')) return graphql({ Media: media(123) })
+    if (query.includes('AiringEpisodes')) return page([schedule(123, 501, 1, '2026-07-02')])
     return new Response(card())
   }
   let service = await createService({ filename: path.join(dir, 'anime.db'), fetcher })
@@ -116,10 +114,10 @@ test('Bangumi search and confirmed binding persist without changing watch progre
   const anime = (await service.request('GET', '/api/anime?season=202607'))[0]
   const record = await service.request('POST', '/api/watch-records', { animeSourceId: anime.id, watchedEpisodes: 4 })
   await service.request('PUT', `/api/anime/${anime.id}/notes/summary`, { content: '保留笔记' })
-  const results = await service.request('GET', '/api/bangumi/search?keyword=%E6%B5%8B%E8%AF%95')
+  const results = await service.request('GET', '/api/anilist/search?keyword=%E6%B5%8B%E8%AF%95')
   assert.equal(results.length, 1)
-  assert.equal(results[0].nameCn, '测试番剧')
-  const binding = await service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { bangumiSubjectId: 123 })
+  assert.equal(results[0].displayName, 'Test Anime')
+  const binding = await service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { anilistSubjectId: 123 })
   assert.equal(binding.subject.id, 123)
   assert.equal(binding.notifyEnabled, true)
   service.close()
@@ -127,33 +125,29 @@ test('Bangumi search and confirmed binding persist without changing watch progre
   const saved = (await service.request('GET', '/api/watch-records'))[0]
   assert.equal(saved.id, record.id)
   assert.equal(saved.watchedEpisodes, 4)
-  assert.equal(saved.broadcast.subject.nameCn, '测试番剧')
+  assert.equal(saved.broadcast.subject.displayName, 'Test Anime')
+  assert.equal(saved.broadcast.provider, 'anilist')
   assert.equal((await service.request('GET', `/api/anime/${anime.id}/notes`)).summary.content, '保留笔记')
   await service.request('DELETE', `/api/anime/${anime.id}/broadcast-binding`)
   assert.equal((await service.request('GET', '/api/watch-records'))[0].broadcast, null)
-  assert.ok(requests.find(item => item.url.includes('/v0/search/subjects')).options.headers['User-Agent'])
+  assert.ok(requests.find(item => item.url === 'https://graphql.anilist.co').options.headers['User-Agent'])
 })
 
 test('today alerts wait until 09:00 Shanghai time, persist de-duplication and respect disabled notifications', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-broadcast-alert-'))
   let now = new Date('2026-09-19T00:30:00Z')
-  const fetcher = async url => {
-    const target = String(url)
-    if (target.includes('/v0/subjects/')) {
-      const id = Number(target.split('/').pop())
-      return new Response(JSON.stringify({ id, type: 2, name: `Anime ${id}`, name_cn: `动画 ${id}`, date: '2026-09-01' }))
-    }
-    if (target.includes('/v0/episodes')) return new Response(JSON.stringify({ total: 1, data: [
-      { id: target.includes('subject_id=124') ? 502 : 501, type: 0, ep: 7, sort: 7, name: '', name_cn: '', airdate: '2026-09-19' }
-    ] }))
+  const fetcher = async (url, options = {}) => {
+    const { query = '', variables } = options.body ? JSON.parse(options.body) : {}
+    if (query.includes('AnimeSubject')) return graphql({ Media: media(variables.id) })
+    if (query.includes('AiringEpisodes')) return page([schedule(variables.mediaId, variables.mediaId === 124 ? 502 : 501, 7, '2026-09-19')])
     return new Response(card('First') + card('Second'))
   }
   const service = await createService({ filename: path.join(dir, 'anime.db'), fetcher, clock: () => now })
   t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
   const anime = await service.request('GET', '/api/anime?season=202607')
   for (const item of anime) await service.request('POST', '/api/watch-records', { animeSourceId: item.id })
-  await service.request('PUT', `/api/anime/${anime[0].id}/broadcast-binding`, { bangumiSubjectId: 123 })
-  await service.request('PUT', `/api/anime/${anime[1].id}/broadcast-binding`, { bangumiSubjectId: 124, notifyEnabled: false })
+  await service.request('PUT', `/api/anime/${anime[0].id}/broadcast-binding`, { anilistSubjectId: 123 })
+  await service.request('PUT', `/api/anime/${anime[1].id}/broadcast-binding`, { anilistSubjectId: 124, notifyEnabled: false })
   assert.deepEqual(service.claimTodayAlerts({ notificationsEnabled: true }), [])
   now = new Date('2026-09-19T01:00:00Z')
   const alerts = service.claimTodayAlerts({ notificationsEnabled: true })
@@ -163,38 +157,140 @@ test('today alerts wait until 09:00 Shanghai time, persist de-duplication and re
   assert.deepEqual(service.claimTodayAlerts({ notificationsEnabled: true }), [])
 })
 
-test('a late Bangumi response cannot overwrite a newer binding', async t => {
+test('a late AniList response cannot overwrite a newer binding', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-broadcast-race-'))
   let releaseOld
   const oldEpisodes = new Promise(resolve => { releaseOld = resolve })
-  const fetcher = async url => {
-    const target = String(url)
-    if (target.includes('/v0/subjects/')) {
-      const id = Number(target.split('/').pop())
-      return new Response(JSON.stringify({ id, type: 2, name: `Subject ${id}`, name_cn: '', date: '2026-01-01' }))
-    }
-    if (target.includes('subject_id=123')) {
+  const fetcher = async (url, options = {}) => {
+    const { query = '', variables } = options.body ? JSON.parse(options.body) : {}
+    if (query.includes('AnimeSubject')) return graphql({ Media: media(variables.id) })
+    if (query.includes('AiringEpisodes') && variables.mediaId === 123) {
       await oldEpisodes
-      return new Response(JSON.stringify({ total: 1, data: [{ id: 501, type: 0, ep: 1, sort: 1, name: '', name_cn: '', airdate: '2026-01-01' }] }))
+      return page([schedule(123, 501, 1, '2026-01-01')])
     }
-    if (target.includes('subject_id=124')) return new Response(JSON.stringify({ total: 1, data: [
-      { id: 502, type: 0, ep: 2, sort: 2, name: '', name_cn: '', airdate: '2026-01-02' }
-    ] }))
+    if (query.includes('AiringEpisodes') && variables.mediaId === 124) return page([schedule(124, 502, 2, '2026-01-02')])
     return new Response(card())
   }
   const service = await createService({ filename: path.join(dir, 'anime.db'), fetcher, clock: () => new Date('2026-01-03T02:00:00Z') })
   t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
   const anime = (await service.request('GET', '/api/anime?season=202601'))[0]
   await service.request('POST', '/api/watch-records', { animeSourceId: anime.id })
-  const first = service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { bangumiSubjectId: 123 })
+  const first = service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { anilistSubjectId: 123 })
   await new Promise(resolve => setTimeout(resolve, 10))
-  const second = service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { bangumiSubjectId: 124 })
+  const second = service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { anilistSubjectId: 124 })
   await second
   releaseOld()
   await first
   const saved = (await service.request('GET', '/api/watch-records'))[0].broadcast
   assert.equal(saved.subject.id, 124)
   assert.equal(saved.estimatedAiredEpisode, 2)
+})
+
+test('Bangumi database migration preserves user data and requires a new AniList binding even for identical IDs', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-provider-migration-'))
+  const filename = path.join(dir, 'anime.db')
+  const db = await openDatabase(filename)
+  db.write(() => {
+    db.run("INSERT INTO anime_sources(id,season,title,source_url,created_at,updated_at) VALUES (42,'202607','原有番剧','https://yuc.wiki/legacy','2026-01-01','2026-01-01')")
+    db.run("INSERT INTO watch_records VALUES (8,42,'watching',7,'2026-01-01','2026-01-01')")
+    db.run("INSERT INTO anime_notes VALUES (9,42,0,'原有笔记','2026-01-01','2026-01-01')")
+    const legacySchema = `DROP TABLE broadcast_alerts; DROP TABLE broadcast_episodes; DROP TABLE broadcast_bindings;
+      CREATE TABLE broadcast_bindings (
+        anime_source_id INTEGER PRIMARY KEY, bangumi_subject_id INTEGER NOT NULL,
+        subject_name TEXT NOT NULL, subject_name_cn TEXT, subject_image_url TEXT, subject_air_date TEXT,
+        notify_enabled INTEGER NOT NULL DEFAULT 1, last_attempt_at TEXT, last_success_at TEXT, last_error TEXT,
+        failure_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);
+      CREATE INDEX idx_broadcast_bindings_subject ON broadcast_bindings(bangumi_subject_id);
+      CREATE TABLE broadcast_episodes (
+        bangumi_episode_id INTEGER PRIMARY KEY, anime_source_id INTEGER NOT NULL,
+        episode_type INTEGER NOT NULL, episode_number REAL, sort_number REAL NOT NULL,
+        name TEXT NOT NULL, name_cn TEXT, air_date TEXT,
+        FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);
+      CREATE INDEX idx_broadcast_episodes_anime ON broadcast_episodes(anime_source_id);
+      CREATE TABLE broadcast_alerts (
+        anime_source_id INTEGER NOT NULL, bangumi_episode_id INTEGER NOT NULL,
+        alert_type TEXT NOT NULL, schedule_date TEXT NOT NULL, handled_at TEXT NOT NULL, disposition TEXT NOT NULL,
+        PRIMARY KEY(anime_source_id,bangumi_episode_id,alert_type,schedule_date),
+        FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);
+      INSERT INTO broadcast_bindings VALUES (42,123,'Old','旧番剧',NULL,NULL,0,'2026-09-19T01:00:00Z','2026-09-19T01:00:00Z',NULL,3,'2027-01-01','2026-01-01','2026-01-01');
+      INSERT INTO broadcast_episodes VALUES (501,42,0,12,12,'old','旧集','2026-09-19');
+      INSERT INTO broadcast_alerts VALUES (42,501,'scheduled_today','2026-09-19','2026-09-19T01:00:00Z','delivered');`
+    for (const sql of legacySchema.split(';').filter(sql => sql.trim())) db.run(sql)
+  })
+  assert.equal(db.rows('SELECT * FROM broadcast_bindings').length, 1)
+  db.close()
+  const original = fs.readFileSync(filename)
+  let calls = 0
+  let failEpisodes = true
+  const fetcher = async (url, options) => {
+    calls++
+    assert.equal(url, 'https://graphql.anilist.co')
+    const { query } = JSON.parse(options.body)
+    if (query.includes('AnimeSubject')) return graphql({ Media: media(123) })
+    if (failEpisodes) return new Response(JSON.stringify({ errors: [{ message: 'unavailable' }] }))
+    return page([schedule(123, 501, 8, '2026-09-18')])
+  }
+  let service = await createService({ filename, fetcher, clock: () => new Date('2026-09-19T02:00:00Z') })
+  t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
+  let record = (await service.request('GET', '/api/watch-records'))[0]
+  assert.equal(record.broadcast.requiresRelink, true)
+  assert.equal(record.broadcast.subject.id, 123)
+  assert.equal(record.broadcast.estimatedAiredEpisode, null)
+  assert.equal(record.watchedEpisodes, 7)
+  assert.equal((await service.request('GET', '/api/anime/42/notes')).summary.content, '原有笔记')
+  assert.deepEqual(await service.refreshBroadcasts({ force: true }), [])
+  assert.deepEqual(service.claimTodayAlerts(), [])
+  assert.equal(calls, 0)
+  assert.deepEqual(fs.readFileSync(filename + '.pre-desktop.bak'), original)
+  const bound = await service.request('PUT', '/api/anime/42/broadcast-binding', { anilistSubjectId: 123, notifyEnabled: false })
+  assert.equal(bound.requiresRelink, false)
+  assert.equal(bound.lastSuccessAt, null)
+  assert.equal(bound.estimatedAiredEpisode, null)
+  assert.ok(bound.error)
+  failEpisodes = false
+  await service.refreshBroadcasts({ force: true })
+  service.close()
+  service = await createService({ filename, fetcher, clock: () => new Date('2026-09-19T02:00:00Z') })
+  record = (await service.request('GET', '/api/watch-records'))[0]
+  assert.equal(record.broadcast.provider, 'anilist')
+  assert.equal(record.broadcast.notifyEnabled, false)
+  assert.equal(record.broadcast.estimatedAiredEpisode, 8)
+  assert.equal(record.watchedEpisodes, 7)
+})
+
+test('partial AniList pagination failure retains prior progress and sets retry state', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-anilist-failure-'))
+  let failSecondPage = false
+  let now = new Date('2026-09-19T01:00:00Z')
+  let calls = 0
+  const service = await createService({ filename: path.join(dir, 'anime.db'), clock: () => now, fetcher: async (_url, options = {}) => {
+    const { query = '', variables } = options.body ? JSON.parse(options.body) : {}
+    if (query.includes('AnimeSubject')) return graphql({ Media: media(123) })
+    if (query.includes('AiringEpisodes')) {
+      calls++
+      if (variables.page === 2) return new Response(JSON.stringify({ errors: [{ message: 'upstream failure' }] }))
+      return graphql({ Page: { pageInfo: { hasNextPage: failSecondPage }, airingSchedules: [schedule(123, 501, failSecondPage ? 9 : 7, '2026-09-18')] } })
+    }
+    return new Response(card())
+  } })
+  t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
+  const anime = (await service.request('GET', '/api/anime?season=202607'))[0]
+  await service.request('POST', '/api/watch-records', { animeSourceId: anime.id })
+  await service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { anilistSubjectId: 123 })
+  assert.equal(service.broadcast(anime.id).estimatedAiredEpisode, 7)
+  failSecondPage = true
+  now = new Date('2026-09-19T02:00:00Z')
+  await service.refreshBroadcasts()
+  assert.equal(service.broadcast(anime.id).estimatedAiredEpisode, 7)
+  assert.match(service.broadcast(anime.id).error, /upstream failure/)
+  const attempts = calls
+  await service.refreshBroadcasts()
+  assert.equal(calls, attempts)
+  now = new Date('2026-09-19T02:05:00Z')
+  failSecondPage = false
+  await service.refreshBroadcasts()
+  assert.equal(service.broadcast(anime.id).error, null)
 })
 
 test('migration preserves existing SQLite IDs and makes a byte-for-byte backup without touching source', async t => {

@@ -11,7 +11,7 @@
     "electron:dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder --win portable",
     "test:desktop-assets": "npm run build && node tests/desktop-assets.test.cjs",
-    "test:electron-main": "node --test tests/local-service.test.cjs tests/auto-launch.test.cjs tests/window-position.test.cjs tests/ball-input.test.cjs",
+    "test:electron-main": "node --test tests/local-service.test.cjs tests/anilist-client.test.cjs tests/auto-launch.test.cjs tests/window-position.test.cjs tests/ball-input.test.cjs",
     "test:packaged": "node tests/packaged-smoke.cjs",
     "test:startup:windows": "node tests/auto-launch-windows.cjs",
     "test:e2e": "npm run build && node tests/desktop-assets.test.cjs && npm run test:electron-main && playwright test"
