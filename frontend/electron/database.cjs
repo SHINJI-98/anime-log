@@ -19,6 +19,24 @@ CREATE TABLE IF NOT EXISTS anime_notes (
  id INTEGER PRIMARY KEY AUTOINCREMENT, anime_source_id INTEGER NOT NULL,
  episode_number INTEGER NOT NULL CHECK(episode_number >= 0), content TEXT NOT NULL,
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(anime_source_id, episode_number),
+ FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS broadcast_bindings (
+ anime_source_id INTEGER PRIMARY KEY, bangumi_subject_id INTEGER NOT NULL,
+ subject_name TEXT NOT NULL, subject_name_cn TEXT, subject_image_url TEXT, subject_air_date TEXT,
+ notify_enabled INTEGER NOT NULL DEFAULT 1 CHECK(notify_enabled IN (0,1)),
+ last_attempt_at TEXT, last_success_at TEXT, last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_broadcast_bindings_subject ON broadcast_bindings(bangumi_subject_id);
+CREATE TABLE IF NOT EXISTS broadcast_episodes (
+ bangumi_episode_id INTEGER PRIMARY KEY, anime_source_id INTEGER NOT NULL,
+ episode_type INTEGER NOT NULL, episode_number REAL, sort_number REAL NOT NULL,
+ name TEXT NOT NULL, name_cn TEXT, air_date TEXT,
+ FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);
+CREATE INDEX IF NOT EXISTS idx_broadcast_episodes_anime ON broadcast_episodes(anime_source_id);
+CREATE TABLE IF NOT EXISTS broadcast_alerts (
+ anime_source_id INTEGER NOT NULL, bangumi_episode_id INTEGER NOT NULL,
+ alert_type TEXT NOT NULL, schedule_date TEXT NOT NULL, handled_at TEXT NOT NULL, disposition TEXT NOT NULL,
+ PRIMARY KEY(anime_source_id,bangumi_episode_id,alert_type,schedule_date),
  FOREIGN KEY(anime_source_id) REFERENCES anime_sources(id) ON DELETE CASCADE);`
 
 async function openDatabase(filename, migrationPath) {

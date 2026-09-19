@@ -75,6 +75,43 @@ test('local CRUD persists, refresh preserves followed/noted anime, validates and
   assert.deepEqual(await service.request('GET', '/api/watch-records'), [])
 })
 
+test('Bangumi search and confirmed binding persist without changing watch progress or notes', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-bangumi-binding-'))
+  const requests = []
+  const fetcher = async (url, options = {}) => {
+    requests.push({ url: String(url), options })
+    if (String(url).includes('/v0/search/subjects')) return new Response(JSON.stringify({ data: [
+      { id: 123, type: 2, name: 'Test Anime', name_cn: '测试番剧', date: '2026-07-01', images: { common: 'https://lain.bgm.tv/pic.jpg' } },
+      { id: 999, type: 1, name: 'Book', name_cn: '书' }
+    ] }))
+    if (String(url).endsWith('/v0/subjects/123')) return new Response(JSON.stringify({
+      id: 123, type: 2, name: 'Test Anime', name_cn: '测试番剧', date: '2026-07-01', images: { common: 'https://lain.bgm.tv/pic.jpg' }
+    }))
+    return new Response(card())
+  }
+  let service = await createService({ filename: path.join(dir, 'anime.db'), fetcher })
+  t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
+  const anime = (await service.request('GET', '/api/anime?season=202607'))[0]
+  const record = await service.request('POST', '/api/watch-records', { animeSourceId: anime.id, watchedEpisodes: 4 })
+  await service.request('PUT', `/api/anime/${anime.id}/notes/summary`, { content: '保留笔记' })
+  const results = await service.request('GET', '/api/bangumi/search?keyword=%E6%B5%8B%E8%AF%95')
+  assert.equal(results.length, 1)
+  assert.equal(results[0].nameCn, '测试番剧')
+  const binding = await service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { bangumiSubjectId: 123 })
+  assert.equal(binding.bangumiSubjectId, 123)
+  assert.equal(binding.notifyEnabled, 1)
+  service.close()
+  service = await createService({ filename: path.join(dir, 'anime.db'), fetcher })
+  const saved = (await service.request('GET', '/api/watch-records'))[0]
+  assert.equal(saved.id, record.id)
+  assert.equal(saved.watchedEpisodes, 4)
+  assert.equal(saved.broadcast.subjectNameCn, '测试番剧')
+  assert.equal((await service.request('GET', `/api/anime/${anime.id}/notes`)).summary.content, '保留笔记')
+  await service.request('DELETE', `/api/anime/${anime.id}/broadcast-binding`)
+  assert.equal((await service.request('GET', '/api/watch-records'))[0].broadcast, undefined)
+  assert.ok(requests.find(item => item.url.includes('/v0/search/subjects')).options.headers['User-Agent'])
+})
+
 test('migration preserves existing SQLite IDs and makes a byte-for-byte backup without touching source', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-migration-'))
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }))

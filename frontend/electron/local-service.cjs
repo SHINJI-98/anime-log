@@ -1,5 +1,6 @@
 const { openDatabase } = require('./database.cjs')
 const { parseAnime } = require('./yuc-parser.cjs')
+const { createBangumiClient } = require('./bangumi-client.cjs')
 const camel = row => row && Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), value]))
 const statuses = ['watching', 'completed', 'dropped']
 function fail(message, status = 400) { throw Object.assign(new Error(message), { status }) }
@@ -36,12 +37,14 @@ async function readRemote(url, { maxBytes, fetcher = fetch, headers = {} }) {
   } finally { await reader.cancel() }
   return { bytes: Buffer.concat(chunks), type: response.headers.get('content-type') || '' }
 }
-async function createService({ filename, migrationPath, baseUrl = 'https://yuc.wiki', fetcher = fetch }) {
+async function createService({ filename, migrationPath, baseUrl = 'https://yuc.wiki', bangumiBaseUrl = 'https://api.bgm.tv', fetcher = fetch }) {
   const db = await openDatabase(filename, migrationPath)
+  const bangumi = createBangumiClient({ fetcher, baseUrl: bangumiBaseUrl })
   const one = (sql, params) => db.rows(sql, params)[0]
   const anime = id => camel(one('SELECT * FROM anime_sources WHERE id = ?', [id]))
   const requireAnime = id => anime(id) || fail('番剧不存在', 404)
-  const record = row => ({ ...camel(row), anime: anime(row.anime_source_id) })
+  const binding = animeSourceId => camel(one('SELECT * FROM broadcast_bindings WHERE anime_source_id = ?', [animeSourceId]))
+  const record = row => ({ ...camel(row), anime: anime(row.anime_source_id), broadcast: binding(row.anime_source_id) })
   const listAnime = season => db.rows('SELECT * FROM anime_sources WHERE season = ? ORDER BY air_day, air_time, title', [season]).map(camel)
   const pending = new Map()
   async function refresh(season) {
@@ -78,6 +81,44 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     const url = new URL(target, 'anime-log://local')
     const route = url.pathname
     if (method === 'GET' && route === '/api/seasons/current') return currentSeason()
+    if (method === 'GET' && route === '/api/bangumi/search') {
+      try { return await bangumi.search(url.searchParams.get('keyword')) }
+      catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
+    }
+    const bangumiSubject = route.match(/^\/api\/bangumi\/subjects\/(\d+)$/)
+    if (method === 'GET' && bangumiSubject) {
+      try { return await bangumi.subject(integer(Number(bangumiSubject[1]), 1)) }
+      catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
+    }
+    const broadcastBinding = route.match(/^\/api\/anime\/(\d+)\/broadcast-binding$/)
+    if (broadcastBinding) {
+      const animeSourceId = integer(Number(broadcastBinding[1]), 1)
+      requireAnime(animeSourceId)
+      if (method === 'DELETE') {
+        db.write(() => db.run('DELETE FROM broadcast_bindings WHERE anime_source_id = ?', [animeSourceId]))
+        return null
+      }
+      if (method === 'PUT') {
+        const subjectId = integer(Number(body.bangumiSubjectId), 1)
+        let subject
+        try { subject = await bangumi.subject(subjectId) }
+        catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
+        const notifyEnabled = body.notifyEnabled !== false ? 1 : 0
+        const now = new Date().toISOString()
+        db.write(() => {
+          db.run('DELETE FROM broadcast_episodes WHERE anime_source_id = ?', [animeSourceId])
+          db.run('DELETE FROM broadcast_alerts WHERE anime_source_id = ?', [animeSourceId])
+          db.run(`INSERT INTO broadcast_bindings
+            (anime_source_id,bangumi_subject_id,subject_name,subject_name_cn,subject_image_url,subject_air_date,notify_enabled,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(anime_source_id) DO UPDATE SET
+            bangumi_subject_id=excluded.bangumi_subject_id,subject_name=excluded.subject_name,subject_name_cn=excluded.subject_name_cn,
+            subject_image_url=excluded.subject_image_url,subject_air_date=excluded.subject_air_date,notify_enabled=excluded.notify_enabled,
+            last_attempt_at=NULL,last_success_at=NULL,last_error=NULL,updated_at=excluded.updated_at`,
+          [animeSourceId, subject.id, subject.name, subject.nameCn, subject.imageUrl, subject.airDate, notifyEnabled, now, now])
+        })
+        return binding(animeSourceId)
+      }
+    }
     if ((method === 'GET' && route === '/api/anime') || (method === 'POST' && route === '/api/anime/refresh')) {
       const season = url.searchParams.get('season')
       if (!/^\d{4}(01|04|07|10)$/.test(season)) fail('季度格式必须为 YYYY01、YYYY04、YYYY07 或 YYYY10')
