@@ -191,15 +191,21 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
         catch (error) { fail(error.message, error.status >= 400 && error.status < 500 ? error.status : 502) }
         const notifyEnabled = body.notifyEnabled !== false ? 1 : 0
         const now = new Date().toISOString()
+        const previousBinding = binding(animeSourceId)
+        const sameSubject = previousBinding?.bangumiSubjectId === subjectId
         db.write(() => {
-          db.run('DELETE FROM broadcast_episodes WHERE anime_source_id = ?', [animeSourceId])
-          db.run('DELETE FROM broadcast_alerts WHERE anime_source_id = ?', [animeSourceId])
+          if (!sameSubject) {
+            db.run('DELETE FROM broadcast_episodes WHERE anime_source_id = ?', [animeSourceId])
+            db.run('DELETE FROM broadcast_alerts WHERE anime_source_id = ?', [animeSourceId])
+          }
           db.run(`INSERT INTO broadcast_bindings
             (anime_source_id,bangumi_subject_id,subject_name,subject_name_cn,subject_image_url,subject_air_date,notify_enabled,created_at,updated_at)
             VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(anime_source_id) DO UPDATE SET
             bangumi_subject_id=excluded.bangumi_subject_id,subject_name=excluded.subject_name,subject_name_cn=excluded.subject_name_cn,
             subject_image_url=excluded.subject_image_url,subject_air_date=excluded.subject_air_date,notify_enabled=excluded.notify_enabled,
-            last_attempt_at=NULL,last_success_at=NULL,last_error=NULL,updated_at=excluded.updated_at`,
+            last_attempt_at=CASE WHEN bangumi_subject_id=excluded.bangumi_subject_id THEN last_attempt_at ELSE NULL END,
+            last_success_at=CASE WHEN bangumi_subject_id=excluded.bangumi_subject_id THEN last_success_at ELSE NULL END,
+            last_error=CASE WHEN bangumi_subject_id=excluded.bangumi_subject_id THEN last_error ELSE NULL END,updated_at=excluded.updated_at`,
           [animeSourceId, subject.id, subject.name, subject.nameCn, subject.imageUrl, subject.airDate, notifyEnabled, now, now])
         })
         await refreshBroadcast(animeSourceId)

@@ -22,6 +22,9 @@
           <p>{{ watchRecords.length }} 部记录</p>
         </div>
         <div class="filters" aria-label="追番状态筛选">
+          <button v-if="desktopAvailable" data-testid="refresh-broadcast" :disabled="broadcastRefreshing" @click="refreshBroadcasts">
+            {{ broadcastRefreshing ? '同步中…' : '同步放送' }}
+          </button>
           <button
             v-for="item in statusTabs"
             :key="item.value"
@@ -98,6 +101,20 @@
                   </label>
                   <strong>/ {{ record.anime.totalEpisodes || '?' }}</strong>
                 </div>
+                <div v-if="record.broadcast" class="broadcast-status" data-testid="broadcast-status">
+                  <strong v-if="record.broadcast.estimatedAiredEpisode !== null">按排期预计已播至第 {{ formatEpisode(record.broadcast.estimatedAiredEpisode) }} 集</strong>
+                  <strong v-else>放送进度未知</strong>
+                  <span v-if="record.broadcast.todayEpisodes.length">今日预计播出第 {{ episodeList(record.broadcast.todayEpisodes) }} 集</span>
+                  <span v-else-if="record.broadcast.next">第 {{ episodeList(record.broadcast.next.episodes) }} 集预计 {{ formatAirDate(record.broadcast.next.date) }} 播出</span>
+                  <span v-else>下一集排期未知</span>
+                  <small :class="{ 'sync-error': record.broadcast.error }">
+                    数据来源：Bangumi<span v-if="record.broadcast.lastSuccessAt"> · 最近同步 {{ formatSyncTime(record.broadcast.lastSuccessAt) }}</span><span v-if="record.broadcast.error"> · 同步失败，数据可能过期</span>
+                  </small>
+                  <em v-if="record.broadcast.hasUnwatchedUpdate">有待看更新</em>
+                </div>
+                <button v-if="desktopAvailable" class="ghost compact broadcast-binding-button" data-testid="open-broadcast-binding" @click="openBroadcastBinding(record)">
+                  {{ record.broadcast ? '更换 Bangumi 关联' : '关联 Bangumi' }}
+                </button>
                 <div class="card-actions watch-card-actions">
                   <button
                     class="icon-button note-button"
@@ -389,6 +406,31 @@
         <p>{{ previewAnime.title }}</p>
       </div>
     </div>
+    <div v-if="bindingRecord" class="poster-modal" role="dialog" aria-modal="true" aria-label="关联 Bangumi" @click="closeBroadcastBinding">
+      <div class="binding-dialog" @click.stop>
+        <header><div><p class="eyebrow">放送排期</p><h2>关联 Bangumi</h2></div><button class="ghost" aria-label="关闭关联窗口" @click="closeBroadcastBinding">×</button></header>
+        <p>为“{{ bindingRecord.anime.title }}”选择对应动画条目。关联后会自动同步预计放送进度。</p>
+        <form class="binding-search" @submit.prevent="runBangumiSearch">
+          <input v-model.trim="bindingQuery" data-testid="bangumi-search-input" maxlength="120" placeholder="番剧标题" />
+          <button class="primary" :disabled="bindingBusy">搜索</button>
+        </form>
+        <p v-if="bindingError" class="notice error">{{ bindingError }}</p>
+        <div v-if="bindingCandidates.length" class="binding-candidates">
+          <article v-for="candidate in bindingCandidates" :key="candidate.id">
+            <img :src="candidate.imageUrl || fallbackPoster" :alt="candidate.nameCn || candidate.name" @error="useFallbackPoster" />
+            <div><strong>{{ candidate.nameCn || candidate.name }}</strong><small v-if="candidate.nameCn && candidate.name">{{ candidate.name }}</small><span>{{ candidate.airDate || '首播日期未知' }} · ID {{ candidate.id }}</span></div>
+            <button class="primary compact" data-testid="bind-bangumi-candidate" :disabled="bindingBusy" @click="bindBangumi(candidate.id)">确认关联</button>
+          </article>
+        </div>
+        <div v-else-if="bindingSearched && !bindingBusy" class="empty-state compact-empty">没有找到候选，可在下方输入条目链接或 ID。</div>
+        <form class="binding-manual" @submit.prevent="bindManualBangumi">
+          <input v-model.trim="manualBangumi" data-testid="bangumi-manual-input" placeholder="https://bgm.tv/subject/123 或 123" />
+          <button :disabled="bindingBusy">使用链接或 ID</button>
+        </form>
+        <label v-if="bindingRecord.broadcast" class="binding-notify"><input type="checkbox" :checked="bindingRecord.broadcast.notifyEnabled" @change="toggleRecordNotification($event.target.checked)" />此番剧允许系统通知</label>
+        <button v-if="bindingRecord.broadcast" class="ghost danger" data-testid="unbind-bangumi" :disabled="bindingBusy" @click="unbindBangumi">解除关联</button>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -403,17 +445,22 @@ import {
   apiUrl,
   deleteEpisodeNote,
   deleteWatchRecord,
+  deleteBroadcastBinding,
   getAnime,
   getAnimeNotes,
   getCurrentSeason,
   getWatchRecords,
+  refreshBroadcast,
   refreshAnime,
+  saveBroadcastBinding,
+  searchBangumi,
   saveEpisodeNote,
   saveSummaryNote,
   updateWatchRecord
 } from './api'
 
 const view = ref('watchlist')
+const desktopAvailable = !!window.animeLogDesktop
 const loading = ref(false)
 const error = ref('')
 const selectedStatus = ref('watching')
@@ -424,6 +471,15 @@ const animeSearchInput = ref(null)
 const animeSearchQuery = ref('')
 const season = ref('')
 const theme = ref('graphite')
+const broadcastRefreshing = ref(false)
+const bindingRecord = ref(null)
+const bindingQuery = ref('')
+const bindingCandidates = ref([])
+const bindingBusy = ref(false)
+const bindingError = ref('')
+const bindingSearched = ref(false)
+const manualBangumi = ref('')
+const unsubscribeBroadcast = window.animeLogDesktop?.onBroadcastUpdated(() => loadWatchRecords())
 try { const saved = localStorage.getItem('anime-log-theme'); if (['graphite', 'ocean', 'forest', 'paper'].includes(saved)) theme.value = saved } catch {}
 watch(theme, value => {
   document.documentElement.dataset.theme = value
@@ -550,6 +606,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', updateBackTopVisibility)
   window.removeEventListener('keydown', handleKeydown)
+  unsubscribeBroadcast?.()
 })
 
 async function withLoading(action) {
@@ -579,6 +636,90 @@ async function loadWatchRecords() {
   await withLoading(async () => {
     watchRecords.value = await getWatchRecords(selectedStatus.value)
   })
+}
+
+async function refreshBroadcasts() {
+  broadcastRefreshing.value = true
+  error.value = ''
+  try {
+    await refreshBroadcast()
+    await loadWatchRecords()
+  } catch (err) { error.value = err.message }
+  finally { broadcastRefreshing.value = false }
+}
+
+async function openBroadcastBinding(record) {
+  bindingRecord.value = record
+  bindingQuery.value = record.anime.title
+  bindingCandidates.value = []
+  bindingError.value = ''
+  bindingSearched.value = false
+  manualBangumi.value = record.broadcast ? String(record.broadcast.subject.id) : ''
+  await runBangumiSearch()
+}
+
+function closeBroadcastBinding() {
+  if (!bindingBusy.value) bindingRecord.value = null
+}
+
+async function runBangumiSearch() {
+  if (!bindingQuery.value) return
+  bindingBusy.value = true
+  bindingError.value = ''
+  try { bindingCandidates.value = await searchBangumi(bindingQuery.value); bindingSearched.value = true }
+  catch (err) { bindingError.value = err.message }
+  finally { bindingBusy.value = false }
+}
+
+async function bindBangumi(subjectId, notifyEnabled = true) {
+  if (!bindingRecord.value) return
+  bindingBusy.value = true
+  bindingError.value = ''
+  try {
+    await saveBroadcastBinding(bindingRecord.value.anime.id, subjectId, notifyEnabled)
+    await loadWatchRecords()
+    bindingRecord.value = null
+  } catch (err) { bindingError.value = err.message }
+  finally { bindingBusy.value = false }
+}
+
+function bindManualBangumi() {
+  const match = manualBangumi.value.match(/(?:subject\/)?(\d+)\/?$/)
+  if (!match) { bindingError.value = '请输入有效的 Bangumi 条目链接或 ID'; return }
+  return bindBangumi(Number(match[1]))
+}
+
+async function unbindBangumi() {
+  if (!bindingRecord.value) return
+  bindingBusy.value = true
+  try {
+    await deleteBroadcastBinding(bindingRecord.value.anime.id)
+    await loadWatchRecords()
+    bindingRecord.value = null
+  } catch (err) { bindingError.value = err.message }
+  finally { bindingBusy.value = false }
+}
+
+async function toggleRecordNotification(enabled) {
+  if (!bindingRecord.value?.broadcast) return
+  bindingBusy.value = true
+  try {
+    await saveBroadcastBinding(bindingRecord.value.anime.id, bindingRecord.value.broadcast.subject.id, enabled)
+    await loadWatchRecords()
+    bindingRecord.value = watchRecords.value.find(record => record.id === bindingRecord.value.id) || null
+  } catch (err) { bindingError.value = err.message }
+  finally { bindingBusy.value = false }
+}
+
+function formatEpisode(value) { return Number.isInteger(value) ? String(value) : String(Number(value)) }
+function episodeList(episodes) { return episodes.map(item => formatEpisode(item.episodeNumber)).join('、') }
+function formatAirDate(value) {
+  const [, month, day] = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/) || []
+  return month ? `${Number(month)} 月 ${Number(day)} 日` : value
+}
+function formatSyncTime(value) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '未知' : date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 async function loadFollowedAnimeSourceIds() {

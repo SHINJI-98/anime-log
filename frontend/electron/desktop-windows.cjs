@@ -10,7 +10,7 @@ function setupDesktop(main, directory) {
   const panelTransparencySupported = process.platform === 'win32' && Number(os.release().split('.')[2]) >= 22621
   const settingsPath = path.join(directory, 'desktop-settings.json')
   const autoLaunch = createAutoLaunch(app)
-  let settings = { closeAction: 'tray', ballSize: 64, ballOpacity: .72, panelOpacity: .95, mode: 'full', startupMode: 'ball' }
+  let settings = { closeAction: 'tray', ballSize: 64, ballOpacity: .72, panelOpacity: .95, mode: 'full', startupMode: 'ball', notificationsEnabled: true }
   try {
     const saved = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
     if (['tray', 'quit', 'ball'].includes(saved.closeAction)) settings.closeAction = saved.closeAction
@@ -21,6 +21,7 @@ function setupDesktop(main, directory) {
     if ([48, 64, 80].includes(saved.ballSize)) settings.ballSize = saved.ballSize
     if (saved.ballOpacity >= .3 && saved.ballOpacity <= 1) settings.ballOpacity = saved.ballOpacity
     if (saved.panelOpacity >= .5 && saved.panelOpacity <= 1) settings.panelOpacity = saved.panelOpacity
+    settings.notificationsEnabled = saved.notificationsEnabled !== false
   } catch {}
   let compact = false
   let started = false
@@ -300,10 +301,11 @@ function setupDesktop(main, directory) {
       const previous = autoLaunch.read()
       const next = { ...settings, closeAction: value.closeAction, lockPosition: value.lockPosition ?? settings.lockPosition, autoLaunch: value.autoLaunch ?? previous.autoLaunch,
         ballSize: value.ballSize ?? settings.ballSize, ballOpacity: value.ballOpacity ?? settings.ballOpacity, panelOpacity: value.panelOpacity ?? settings.panelOpacity,
-        startupMode: value.startupMode ?? settings.startupMode }
+        startupMode: value.startupMode ?? settings.startupMode, notificationsEnabled: value.notificationsEnabled ?? settings.notificationsEnabled }
       if (!['tray', 'ball'].includes(next.startupMode)) throw new Error('启动模式无效')
       if (![48, 64, 80].includes(next.ballSize) || !Number.isFinite(next.ballOpacity) || next.ballOpacity < .3 || next.ballOpacity > 1 || !Number.isFinite(next.panelOpacity) || next.panelOpacity < .5 || next.panelOpacity > 1) throw new Error('外观设置无效')
       if (typeof next.autoLaunch !== 'boolean') throw new Error('自启动选项无效')
+      if (typeof next.notificationsEnabled !== 'boolean') throw new Error('通知选项无效')
       const changed = next.autoLaunch !== previous.autoLaunch || next.autoLaunch === true
       fs.mkdirSync(directory, { recursive: true })
       fs.writeFileSync(settingsPath + '.tmp', JSON.stringify(next))

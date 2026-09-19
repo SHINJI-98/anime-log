@@ -99,3 +99,28 @@ export function deleteEpisodeNote(animeSourceId, episodeNumber) {
     method: 'DELETE'
   })
 }
+
+export function searchBangumi(keyword) {
+  return request(`/api/bangumi/search?keyword=${encodeURIComponent(keyword)}`)
+}
+
+export function getBangumiSubject(id) {
+  return request(`/api/bangumi/subjects/${encodeURIComponent(id)}`)
+}
+
+export function saveBroadcastBinding(animeSourceId, bangumiSubjectId, notifyEnabled = true) {
+  return request(`/api/anime/${animeSourceId}/broadcast-binding`, {
+    method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ bangumiSubjectId, notifyEnabled })
+  })
+}
+
+export function deleteBroadcastBinding(animeSourceId) {
+  return request(`/api/anime/${animeSourceId}/broadcast-binding`, { method: 'DELETE' })
+}
+
+export function refreshBroadcast(animeSourceId) {
+  return request('/api/broadcast/refresh', {
+    method: 'POST', headers: jsonHeaders,
+    body: JSON.stringify(animeSourceId ? { animeSourceId } : {})
+  })
+}

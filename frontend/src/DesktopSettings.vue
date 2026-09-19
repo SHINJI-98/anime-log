@@ -15,6 +15,8 @@
     <p v-if="!panelTransparencySupported">周历透明背景需要 Windows 11 22H2 或更新版本；当前使用实色背景。</p>
     <label class="startup-option"><input v-model="autoLaunch" type="checkbox" :disabled="busy || !autoLaunchSupported" />开机自启动</label>
     <label>开机启动时<select v-model="startupMode" :disabled="busy"><option value="ball">安静显示悬浮球</option><option value="tray">仅系统托盘</option></select></label>
+    <label class="startup-option"><input v-model="notificationsEnabled" type="checkbox" :disabled="busy" />番剧更新系统通知</label>
+    <p>关闭后仍会同步并在追番列表展示放送进度。</p>
     <p v-if="autoLaunchSupported">开启后，登录 Windows 时自动启动。免安装版移动位置后，请重新关闭并开启此选项。</p>
     <p v-else>开机自启动可在 Windows 打包版中设置。</p>
     <p>收进托盘后，点击托盘图标可恢复主界面；右键菜单可显示悬浮球或退出应用。</p>
@@ -40,6 +42,7 @@ async function resetPosition() {
   try { await window.animeLogDesktop.resetPosition() } catch (e) { error.value = e.message }
 }
 const autoLaunch = ref(false)
+const notificationsEnabled = ref(true)
 const startupMode = ref('ball')
 const autoLaunchSupported = ref(false)
 const busy = ref(true)
@@ -56,6 +59,7 @@ onMounted(async () => {
     panelOpacity.value = settings.panelOpacity
     panelTransparencySupported.value = settings.panelTransparencySupported
     autoLaunch.value = settings.autoLaunch
+    notificationsEnabled.value = settings.notificationsEnabled !== false
     startupMode.value = settings.startupMode
     fullscreenError.value = settings.fullscreenError
     autoLaunchSupported.value = settings.autoLaunchSupported
@@ -67,7 +71,7 @@ async function save() {
   busy.value = true
   error.value = ''
   try {
-    await window.animeLogDesktop.saveSettings({ closeAction: closeAction.value, lockPosition: lockPosition.value, autoLaunch: autoLaunch.value, ballSize: ballSize.value, ballOpacity: ballOpacity.value, panelOpacity: panelOpacity.value, startupMode: startupMode.value })
+    await window.animeLogDesktop.saveSettings({ closeAction: closeAction.value, lockPosition: lockPosition.value, autoLaunch: autoLaunch.value, notificationsEnabled: notificationsEnabled.value, ballSize: ballSize.value, ballOpacity: ballOpacity.value, panelOpacity: panelOpacity.value, startupMode: startupMode.value })
     emit('close')
   } catch (e) { error.value = e.message }
   finally { busy.value = false }
