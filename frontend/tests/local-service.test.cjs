@@ -163,6 +163,40 @@ test('today alerts wait until 09:00 Shanghai time, persist de-duplication and re
   assert.deepEqual(service.claimTodayAlerts({ notificationsEnabled: true }), [])
 })
 
+test('a late Bangumi response cannot overwrite a newer binding', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-broadcast-race-'))
+  let releaseOld
+  const oldEpisodes = new Promise(resolve => { releaseOld = resolve })
+  const fetcher = async url => {
+    const target = String(url)
+    if (target.includes('/v0/subjects/')) {
+      const id = Number(target.split('/').pop())
+      return new Response(JSON.stringify({ id, type: 2, name: `Subject ${id}`, name_cn: '', date: '2026-01-01' }))
+    }
+    if (target.includes('subject_id=123')) {
+      await oldEpisodes
+      return new Response(JSON.stringify({ total: 1, data: [{ id: 501, type: 0, ep: 1, sort: 1, name: '', name_cn: '', airdate: '2026-01-01' }] }))
+    }
+    if (target.includes('subject_id=124')) return new Response(JSON.stringify({ total: 1, data: [
+      { id: 502, type: 0, ep: 2, sort: 2, name: '', name_cn: '', airdate: '2026-01-02' }
+    ] }))
+    return new Response(card())
+  }
+  const service = await createService({ filename: path.join(dir, 'anime.db'), fetcher, clock: () => new Date('2026-01-03T02:00:00Z') })
+  t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
+  const anime = (await service.request('GET', '/api/anime?season=202601'))[0]
+  await service.request('POST', '/api/watch-records', { animeSourceId: anime.id })
+  const first = service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { bangumiSubjectId: 123 })
+  await new Promise(resolve => setTimeout(resolve, 10))
+  const second = service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { bangumiSubjectId: 124 })
+  await second
+  releaseOld()
+  await first
+  const saved = (await service.request('GET', '/api/watch-records'))[0].broadcast
+  assert.equal(saved.subject.id, 124)
+  assert.equal(saved.estimatedAiredEpisode, 2)
+})
+
 test('migration preserves existing SQLite IDs and makes a byte-for-byte backup without touching source', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-migration-'))
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }))

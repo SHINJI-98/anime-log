@@ -7,6 +7,7 @@ const path = require('path')
 test('desktop app supports tracking, sticky mode and notes without Java or an HTTP backend', async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-log-e2e-'))
   const fakeYuc = await startFakeYucWiki()
+  const fakeBangumi = await startFakeBangumi()
   let electronApp
 
   try {
@@ -18,7 +19,8 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
         ANIME_LOG_LOAD_DIST: '1',
         ANIME_LOG_USER_DATA_DIR: userDataDir,
         ANIME_LOG_MIGRATION_DB: path.join(userDataDir, 'missing-source.db'),
-        ANIME_LOG_YUC_BASE_URL: fakeYuc.baseUrl
+        ANIME_LOG_YUC_BASE_URL: fakeYuc.baseUrl,
+        ANIME_LOG_BANGUMI_BASE_URL: fakeBangumi.baseUrl
       }
     })
 
@@ -44,6 +46,12 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
 
     await page.locator('[data-testid="follow-anime"]').first().click()
     await expect(page.locator('[data-testid="watch-record-card"]')).toContainText('E2E Anime')
+    await page.locator('[data-testid="open-broadcast-binding"]').click()
+    await expect(page.getByRole('dialog', { name: '关联 Bangumi' })).toBeVisible()
+    await expect(page.locator('[data-testid="bind-bangumi-candidate"]')).toHaveCount(1)
+    await page.locator('[data-testid="bind-bangumi-candidate"]').click()
+    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('按排期预计已播至第 1 集')
+    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('今日预计播出第 2 集')
     await expect(page.locator('[data-testid="watchlist-view"] .day-section')).toHaveCount(1)
     await page.locator('.clickable-poster').first().click()
     await expect(page.locator('.poster-modal')).toBeVisible()
@@ -147,6 +155,7 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
       await electronApp.close()
     }
     await fakeYuc.close()
+    await fakeBangumi.close()
     fs.rmSync(userDataDir, { recursive: true, force: true })
   }
 })
@@ -430,6 +439,45 @@ function startFakeYucWiki() {
       })
     })
   })
+}
+
+function startFakeBangumi() {
+  const today = chinaDateOffset(0)
+  const yesterday = chinaDateOffset(-1)
+  const tomorrow = chinaDateOffset(1)
+  const server = http.createServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json; charset=utf-8')
+    if (request.url.startsWith('/v0/search/subjects')) {
+      response.end(JSON.stringify({ data: [{ id: 321, type: 2, name: 'E2E Anime', name_cn: '端到端动画', date: yesterday, images: {} }] }))
+      return
+    }
+    if (request.url === '/v0/subjects/321') {
+      response.end(JSON.stringify({ id: 321, type: 2, name: 'E2E Anime', name_cn: '端到端动画', date: yesterday, images: {} }))
+      return
+    }
+    if (request.url.startsWith('/v0/episodes')) {
+      response.end(JSON.stringify({ total: 3, data: [
+        { id: 8001, type: 0, ep: 1, sort: 1, name: '', name_cn: '', airdate: yesterday },
+        { id: 8002, type: 0, ep: 2, sort: 2, name: '', name_cn: '', airdate: today },
+        { id: 8003, type: 0, ep: 3, sort: 3, name: '', name_cn: '', airdate: tomorrow }
+      ] }))
+      return
+    }
+    response.writeHead(404)
+    response.end(JSON.stringify({ message: 'not found' }))
+  })
+  return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve({
+    baseUrl: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise(closeResolve => server.close(closeResolve))
+  })))
+}
+
+function chinaDateOffset(days) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date())
+  const get = type => Number(parts.find(part => part.type === type).value)
+  const date = new Date(Date.UTC(get('year'), get('month') - 1, get('day') + days))
+  return date.toISOString().slice(0, 10)
 }
 
 // Drive the native hover poll deterministically; Playwright's DOM mouse does not

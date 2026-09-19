@@ -25,13 +25,13 @@ function normalizeSubject(subject) {
   }
 }
 
-function createBangumiClient({ fetcher = fetch, baseUrl = 'https://api.bgm.tv' } = {}) {
+function createBangumiClient({ fetcher = fetch, baseUrl = 'https://api.bgm.tv', signal } = {}) {
   const root = baseUrl.replace(/\/$/, '')
   async function request(path, options = {}) {
     const response = await fetcher(`${root}${path}`, {
       ...options,
       redirect: 'error',
-      signal: AbortSignal.timeout(15000),
+      signal: signal ? AbortSignal.any([AbortSignal.timeout(15000), signal]) : AbortSignal.timeout(15000),
       headers: { Accept: 'application/json', 'User-Agent': USER_AGENT, ...options.headers }
     })
     return readJson(response)
