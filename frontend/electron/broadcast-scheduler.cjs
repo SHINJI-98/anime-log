@@ -4,7 +4,7 @@ function createBroadcastScheduler({ service, powerMonitor, onUpdated, intervalMs
   async function tick() {
     if (running) return running
     running = service.refreshBroadcasts().then(results => {
-      if (results.length) onUpdated?.(results)
+      onUpdated?.(results)
       return results
     }).catch(error => {
       console.error('同步 Bangumi 放送进度失败:', error.message)

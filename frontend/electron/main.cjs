@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, protocol, nativeTheme, powerMonitor } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, protocol, nativeTheme, powerMonitor, Notification } = require('electron')
 const path = require('path')
 const { setupDesktop } = require('./desktop-windows.cjs')
 nativeTheme.themeSource = 'dark'
@@ -29,7 +29,10 @@ ipcMain.handle('anime-log-pin', (event, enabled) => {
 })
 ipcMain.handle('anime-log-settings', (event, value) => {
   if (event.sender !== mainWindow?.webContents) return
-  return value === undefined ? desktopWindows.getSettings() : desktopWindows.saveSettings(value)
+  if (value === undefined) return desktopWindows.getSettings()
+  const result = desktopWindows.saveSettings(value)
+  broadcastScheduler?.tick()
+  return result
 })
 
 ipcMain.handle('anime-log-pin-state', event => {
@@ -114,6 +117,30 @@ function createWindow() {
   mainWindow.webContents.on('will-navigate', event => event.preventDefault())
 }
 
+function deliverBroadcastAlerts() {
+  const enabled = desktopWindows?.getSettings().notificationsEnabled !== false
+  const alerts = service?.claimTodayAlerts({ notificationsEnabled: enabled }) || []
+  if (!alerts.length) return
+  if (!Notification.isSupported()) { service.markAlerts(alerts, 'failed'); return }
+  const anime = [...new Map(alerts.map(item => [item.animeSourceId, item])).values()]
+  const title = anime.length === 1 ? `${anime[0].title} 今日更新` : `今日有 ${anime.length} 部番剧预计更新`
+  const body = anime.length === 1
+    ? `按 Bangumi 排期，今日预计播出第 ${alerts.map(item => item.episodeNumber).join('、')} 集`
+    : anime.slice(0, 4).map(item => item.title).join('、') + (anime.length > 4 ? ` 等 ${anime.length} 部` : '')
+  try {
+    const notification = new Notification({ title, body, silent: false })
+    notification.on('click', () => {
+      desktopWindows?.restore()
+      mainWindow?.webContents.send('anime-log-focus-broadcast', anime.length === 1 ? anime[0].animeSourceId : null)
+    })
+    notification.show()
+    service.markAlerts(alerts, 'delivered')
+  } catch (error) {
+    console.error('番剧更新通知发送失败:', error.message)
+    service.markAlerts(alerts, 'failed')
+  }
+}
+
 async function loadApp() {
   const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173'
   if (isDev() && process.env.ANIME_LOG_LOAD_DIST !== '1') {
@@ -139,7 +166,8 @@ if (!app.requestSingleInstanceLock()) {
     await loadApp()
     desktopWindows.start()
     broadcastScheduler = createBroadcastScheduler({ service, powerMonitor, onUpdated: results => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('anime-log-broadcast-updated', results)
+      if (results.length && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('anime-log-broadcast-updated', results)
+      deliverBroadcastAlerts()
     } })
     broadcastScheduler.start()
   } catch (error) {

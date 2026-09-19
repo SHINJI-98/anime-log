@@ -67,6 +67,7 @@
           <div class="schedule-grid">
             <article
               v-for="record in group.items"
+              :id="`watch-record-${record.anime.id}`"
               :key="record.id"
               class="schedule-item watch-schedule-item"
               data-testid="watch-record-card"
@@ -480,6 +481,13 @@ const bindingError = ref('')
 const bindingSearched = ref(false)
 const manualBangumi = ref('')
 const unsubscribeBroadcast = window.animeLogDesktop?.onBroadcastUpdated(() => loadWatchRecords())
+const unsubscribeBroadcastFocus = window.animeLogDesktop?.onBroadcastFocus(async animeSourceId => {
+  view.value = 'watchlist'
+  selectedStatus.value = 'watching'
+  await loadWatchRecords()
+  if (animeSourceId) requestAnimationFrame(() => document.getElementById(`watch-record-${animeSourceId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+  else scrollToTop()
+})
 try { const saved = localStorage.getItem('anime-log-theme'); if (['graphite', 'ocean', 'forest', 'paper'].includes(saved)) theme.value = saved } catch {}
 watch(theme, value => {
   document.documentElement.dataset.theme = value
@@ -607,6 +615,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', updateBackTopVisibility)
   window.removeEventListener('keydown', handleKeydown)
   unsubscribeBroadcast?.()
+  unsubscribeBroadcastFocus?.()
 })
 
 async function withLoading(action) {

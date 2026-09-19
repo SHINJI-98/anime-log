@@ -1,7 +1,7 @@
 const { openDatabase } = require('./database.cjs')
 const { parseAnime } = require('./yuc-parser.cjs')
 const { createBangumiClient } = require('./bangumi-client.cjs')
-const { calculateProgress } = require('./broadcast-progress.cjs')
+const { calculateProgress, shanghaiDate, shanghaiHour } = require('./broadcast-progress.cjs')
 const camel = row => row && Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), value]))
 const statuses = ['watching', 'completed', 'dropped']
 function fail(message, status = 400) { throw Object.assign(new Error(message), { status }) }
@@ -157,6 +157,37 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     await Promise.all([worker(), worker()])
     return results
   }
+  function claimTodayAlerts({ notificationsEnabled = true } = {}) {
+    if (shanghaiHour(clock()) < 9) return []
+    const today = shanghaiDate(clock())
+    const freshAfter = new Date(clock().getTime() - 24 * 3600000).toISOString()
+    const candidates = db.rows(`SELECT e.anime_source_id,e.bangumi_episode_id,e.episode_number,a.title,b.notify_enabled
+      FROM broadcast_episodes e
+      JOIN broadcast_bindings b ON b.anime_source_id=e.anime_source_id
+      JOIN anime_sources a ON a.id=e.anime_source_id
+      JOIN watch_records w ON w.anime_source_id=e.anime_source_id
+      WHERE e.episode_type=0 AND e.air_date=? AND w.status='watching' AND b.last_success_at>=?
+      AND NOT EXISTS (SELECT 1 FROM broadcast_alerts x WHERE x.anime_source_id=e.anime_source_id
+        AND x.bangumi_episode_id=e.bangumi_episode_id AND x.alert_type='scheduled_today' AND x.schedule_date=?)
+      ORDER BY a.title,e.sort_number`, [today, freshAfter, today])
+    if (!candidates.length) return []
+    const handledAt = clock().toISOString()
+    db.write(() => {
+      for (const item of candidates) db.run(`INSERT INTO broadcast_alerts
+        (anime_source_id,bangumi_episode_id,alert_type,schedule_date,handled_at,disposition) VALUES (?,?,?,?,?,?)`,
+      [item.anime_source_id, item.bangumi_episode_id, 'scheduled_today', today, handledAt,
+        notificationsEnabled && item.notify_enabled === 1 ? 'pending' : 'silent'])
+    })
+    return candidates.filter(item => notificationsEnabled && item.notify_enabled === 1).map(camel)
+  }
+  function markAlerts(items, disposition) {
+    if (!['delivered', 'failed'].includes(disposition)) return
+    db.write(() => {
+      for (const item of items) db.run(`UPDATE broadcast_alerts SET disposition=?,handled_at=?
+        WHERE anime_source_id=? AND bangumi_episode_id=? AND alert_type='scheduled_today' AND schedule_date=?`,
+      [disposition, clock().toISOString(), item.animeSourceId, item.bangumiEpisodeId, shanghaiDate(clock())])
+    })
+  }
   async function request(method, target, body = {}) {
     const url = new URL(target, 'anime-log://local')
     const route = url.pathname
@@ -283,6 +314,6 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     if (!/^image\/(jpeg|png|webp|gif|avif)(;|$)/i.test(result.type)) fail('图片格式不受支持')
     return result
   }
-  return { request, image, refreshBroadcasts, broadcast, close: db.close }
+  return { request, image, refreshBroadcasts, broadcast, claimTodayAlerts, markAlerts, close: db.close }
 }
 module.exports = { createService, currentSeason }
