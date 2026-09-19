@@ -1,0 +1,10 @@
+Chinese title aliases derived from bangumi-data/bangumi-data.
+Source: https://github.com/bangumi-data/bangumi-data
+Source data: https://raw.githubusercontent.com/bangumi-data/bangumi-data/master/dist/data.json
+Retrieved: 2026-09-20
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License text: https://creativecommons.org/licenses/by/4.0/legalcode
+
+Changes by Anime Log: retain only entries with one explicit AniList ID;
+extract and merge titles/translations by that ID; omit other metadata.
+This attribution and license notice applies to bangumi-data-names.json.

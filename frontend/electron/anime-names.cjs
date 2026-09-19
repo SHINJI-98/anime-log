@@ -1,6 +1,8 @@
 const { Converter } = require('opencc-js')
 const simplify = Converter({ from: 'tw', to: 'cn' })
 const SOURCE = 'https://raw.githubusercontent.com/soruly/anilist-chinese/master/anilist-chinese.json'
+const SUPPLEMENT_SOURCE = 'https://raw.githubusercontent.com/bangumi-data/bangumi-data/master/dist/data.json'
+const { parseBangumiNames } = require('./bangumi-data-names.cjs')
 const normalize = value => simplify(String(value).normalize('NFKC')).toLowerCase().replace(/[\p{P}\p{Z}\s]/gu, '')
 
 function validate(data) {
@@ -13,25 +15,34 @@ function validate(data) {
   return data
 }
 
-function createAnimeNames({ db, client, fetcher = fetch, clock = () => new Date(), signal, bundled = require('./data/anilist-chinese.json') }) {
-  let data = validate(bundled)
-  const cached = db.rows('SELECT * FROM anime_name_catalog WHERE source=?', [SOURCE])[0]
-  if (cached) { try { data = validate(JSON.parse(cached.content)) } catch {} }
+function createAnimeNames({ db, client, fetcher = fetch, clock = () => new Date(), signal, bundled, supplemental }) {
+  // Supplying a fixture keeps tests isolated from bundled community data.
+  const catalogs = [{ source: SOURCE, data: validate(bundled || require('./data/anilist-chinese.json')), parse: validate }]
+  const extra = supplemental ?? (bundled ? [] : require('./data/bangumi-data-names.json'))
+  if (extra.length) catalogs.push({ source: SUPPLEMENT_SOURCE, data: validate(extra), parse: payload => validate(parseBangumiNames(payload)) })
+  for (const catalog of catalogs) {
+    const cached = db.rows('SELECT * FROM anime_name_catalog WHERE source=?', [catalog.source])[0]
+    if (cached) { try { catalog.data = validate(JSON.parse(cached.content)) } catch {} }
+    catalog.lastAttempt = null
+  }
   let index
   function rebuild() {
-    index = new Map(data.filter(row => row.title.trim()).map(row => [row.id, { title: simplify(row.title), names: [row.title, ...row.synonyms].map(normalize).filter(Boolean) }]))
+    index = new Map()
+    for (const catalog of catalogs) for (const row of catalog.data) {
+      if (!row.title.trim()) continue
+      const previous = index.get(row.id)
+      index.set(row.id, { title: simplify(row.title), names: [...new Set([...(previous?.names || []), ...[row.title, ...row.synonyms].map(normalize).filter(Boolean)])] })
+    }
   }
   rebuild()
-  let pending
-  let lastAttempt = 0
-  async function update() {
-    if (pending) return pending
+  async function updateCatalog(catalog) {
+    if (catalog.pending) return catalog.pending
     const now = clock().getTime()
-    const stored = db.rows('SELECT updated_at FROM anime_name_catalog WHERE source=?', [SOURCE])[0]
-    if (now - lastAttempt < 3600000 || (stored && now - Date.parse(stored.updated_at) < 7 * 86400000)) return
-    lastAttempt = now
-    pending = (async () => {
-      const response = await fetcher(SOURCE, { redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) })
+    const stored = db.rows('SELECT updated_at FROM anime_name_catalog WHERE source=?', [catalog.source])[0]
+    if ((catalog.lastAttempt !== null && now - catalog.lastAttempt < 3600000) || (stored && now - Date.parse(stored.updated_at) < 7 * 86400000)) return
+    catalog.lastAttempt = now
+    catalog.pending = (async () => {
+      const response = await fetcher(catalog.source, { redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) })
       if (!response.ok) throw new Error(`中文名称库更新失败 (${response.status})`)
       const reader = response.body.getReader()
       const chunks = []
@@ -45,15 +56,19 @@ function createAnimeNames({ db, client, fetcher = fetch, clock = () => new Date(
           chunks.push(Buffer.from(value))
         }
       } finally { await reader.cancel() }
-      const content = Buffer.concat(chunks).toString('utf8')
-      const next = validate(JSON.parse(content))
-      if (next.length < data.length * 0.8) throw new Error('中文名称库疑似不完整，保留旧版本')
+      const next = catalog.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+      if (next.filter(row => row.title.trim()).length < catalog.data.filter(row => row.title.trim()).length * 0.8) throw new Error('中文名称库疑似不完整，保留旧版本')
       signal?.throwIfAborted()
-      db.write(() => db.run('INSERT INTO anime_name_catalog VALUES (?,?,?) ON CONFLICT(source) DO UPDATE SET content=excluded.content,updated_at=excluded.updated_at', [SOURCE, content, clock().toISOString()]))
-      data = next
+      db.write(() => db.run('INSERT INTO anime_name_catalog VALUES (?,?,?) ON CONFLICT(source) DO UPDATE SET content=excluded.content,updated_at=excluded.updated_at', [catalog.source, JSON.stringify(next), clock().toISOString()]))
+      catalog.data = next
       rebuild()
-    })().finally(() => { pending = null })
-    return pending
+    })().finally(() => { catalog.pending = null })
+    return catalog.pending
+  }
+  async function update() {
+    const results = await Promise.allSettled(catalogs.map(updateCatalog))
+    const failed = results.find(result => result.status === 'rejected')
+    if (failed) throw failed.reason
   }
   function decorate(subject) {
     const title = index.get(subject.id)?.title

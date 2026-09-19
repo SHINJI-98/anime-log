@@ -22,23 +22,26 @@ test('unique Chinese titles auto-link, manual unlink persists, and late auto-lin
   let release
   let started
   const fetcher = async (_url, options) => {
-    if (!options?.body) return new Response(card('葬送的芙莉莲'))
+    if (!options?.body) return new Response(card('欺诈游戏'))
     const { query, variables } = JSON.parse(options.body)
     if (query.includes('AnimeSubject')) {
       if (hold) { started(); await new Promise(resolve => { release = resolve }) }
       return graphql({ Media: media(variables.id) })
     }
     if (query.includes('AnimeCandidates')) return graphql({ Page: { media: variables.ids.map(media) } })
-    return page([schedule(154587, 1, 1, '2026-09-18')])
+    return page([schedule(197754, 1, 1, '2026-09-18')])
   }
   const options = { filename: path.join(dir, 'test.db'), fetcher }
   let service = await createService(options)
   t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
   const anime = (await service.request('GET', '/api/anime?season=202607'))[0]
   const record = await service.request('POST', '/api/watch-records', { animeSourceId: anime.id, watchedEpisodes: 5 })
-  assert.equal(record.broadcast.subject.id, 154587)
+  assert.equal(record.broadcast.subject.id, 197754)
   assert.equal(record.watchedEpisodes, 5)
-  assert.equal((await service.request('GET', '/api/anime/search?keyword=葬送的芙莉莲'))[0].id, 154587)
+  const candidates = await service.request('GET', '/api/anime/search?keyword=欺诈游戏')
+  assert.equal(candidates[0].id, 197754)
+  assert.equal(candidates[0].metadataUnavailable, undefined)
+  assert.equal(candidates[0].name, 'テスト')
   await service.request('DELETE', `/api/anime/${anime.id}/broadcast-binding`)
   service.close()
   service = await createService(options)
@@ -47,7 +50,7 @@ test('unique Chinese titles auto-link, manual unlink persists, and late auto-lin
   // A fresh title has no opt-out; unlink while verification is pending must win.
   const db = await openDatabase(path.join(dir, 'race.db'))
   db.write(() => {
-    db.run("INSERT INTO anime_sources VALUES (1,'202607','葬送的芙莉莲',NULL,NULL,NULL,28,'test','now','now')")
+    db.run("INSERT INTO anime_sources VALUES (1,'202607','欺诈游戏',NULL,NULL,NULL,28,'test','now','now')")
     db.run("INSERT INTO watch_records VALUES (1,1,'watching',2,'now','now')")
   })
   db.close()
@@ -151,9 +154,9 @@ test('AniList search and confirmed binding persist without changing watch progre
   const fetcher = async (url, options = {}) => {
     requests.push({ url: String(url), options })
     const query = options.body ? JSON.parse(options.body).query : ''
-    if (query.includes('SearchAnime')) return graphql({ Page: { media: [media(123)] } })
-    if (query.includes('AnimeSubject')) return graphql({ Media: media(123) })
-    if (query.includes('AiringEpisodes')) return page([schedule(123, 501, 1, '2026-07-02')])
+    if (query.includes('SearchAnime')) return graphql({ Page: { media: [media(900001)] } })
+    if (query.includes('AnimeSubject')) return graphql({ Media: media(900001) })
+    if (query.includes('AiringEpisodes')) return page([schedule(900001, 501, 1, '2026-07-02')])
     return new Response(card())
   }
   let service = await createService({ filename: path.join(dir, 'anime.db'), fetcher })
@@ -161,11 +164,11 @@ test('AniList search and confirmed binding persist without changing watch progre
   const anime = (await service.request('GET', '/api/anime?season=202607'))[0]
   const record = await service.request('POST', '/api/watch-records', { animeSourceId: anime.id, watchedEpisodes: 4 })
   await service.request('PUT', `/api/anime/${anime.id}/notes/summary`, { content: '保留笔记' })
-  const results = await service.request('GET', '/api/anilist/search?keyword=%E6%B5%8B%E8%AF%95')
+  const results = await service.request('GET', '/api/anilist/search?keyword=FixtureNonCatalog')
   assert.equal(results.length, 1)
   assert.equal(results[0].displayName, 'Test Anime')
-  const binding = await service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { anilistSubjectId: 123 })
-  assert.equal(binding.subject.id, 123)
+  const binding = await service.request('PUT', `/api/anime/${anime.id}/broadcast-binding`, { anilistSubjectId: 900001 })
+  assert.equal(binding.subject.id, 900001)
   assert.equal(binding.notifyEnabled, true)
   service.close()
   service = await createService({ filename: path.join(dir, 'anime.db'), fetcher })

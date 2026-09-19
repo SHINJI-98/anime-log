@@ -4,6 +4,24 @@ const { createAniListClient } = require('../electron/anilist-client.cjs')
 
 const response = data => new Response(JSON.stringify({ data }))
 
+test('client resolves mapped candidate IDs through GraphQL and returns serializable metadata', async () => {
+  let calls = 0
+  const client = createAniListClient({ fetcher: async (_url, options) => {
+    calls++
+    const { query, variables } = JSON.parse(options.body)
+    assert.ok(query.includes('id_in: $ids'))
+    assert.deepEqual(variables.ids, [197754])
+    assert.equal(variables.search, undefined)
+    return response({ Page: { media: [{ id: 197754, type: 'ANIME', title: { native: 'LIAR GAME' }, startDate: { year: 2026, month: 4, day: 7 } }] } })
+  } })
+  const result = await client.subjects([197754])
+  assert.equal(calls, 1)
+  assert.equal(result[0].name, 'LIAR GAME')
+  assert.equal(result[0].airDate, '2026-04-07')
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), result)
+  await assert.rejects(client.subjects([0]), /ID 无效/)
+})
+
 test('AniList search uses GraphQL variables, supports missing translations and partial dates', async () => {
   const client = createAniListClient({ fetcher: async (url, options) => {
     assert.equal(url, 'https://graphql.anilist.co')

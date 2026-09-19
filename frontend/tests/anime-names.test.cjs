@@ -5,6 +5,7 @@ const os = require('node:os')
 const path = require('node:path')
 const { openDatabase } = require('../electron/database.cjs')
 const { createAnimeNames, normalize } = require('../electron/anime-names.cjs')
+const { parseBangumiNames } = require('../electron/bangumi-data-names.cjs')
 
 const bundled = [
   { id: 1, title: '進擊的巨人', synonyms: ['巨人'] },
@@ -18,6 +19,50 @@ async function fixture(t) {
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }) })
   return { db, filename }
 }
+test('real Chinese title 欺诈游戏 resolves to LIAR GAME by ID without forwarding Chinese to AniList', async t => {
+  const { db } = await fixture(t)
+  const names = createAnimeNames({ db, client: {
+    search: async () => { assert.fail('Chinese title must resolve locally') },
+    subjects: async ids => {
+      assert.deepEqual(ids, [197754])
+      return [{ id: 197754, name: 'LIAR GAME', displayName: 'LIAR GAME' }]
+    }
+  } })
+  assert.equal(names.exactId('欺诈游戏'), 197754)
+  assert.equal(names.exactId('LIAR GAME - 詐欺遊戲'), 197754)
+  const result = await names.search('欺诈游戏')
+  assert.equal(result[0].id, 197754)
+  assert.equal(result[0].name, 'LIAR GAME')
+  assert.equal(result[0].displayName, '欺诈游戏')
+})
+test('supplement uses explicit AniList IDs only, merging translations without confusing Bangumi IDs', () => {
+  const item = { title: 'LIAR GAME', titleTranslate: { 'zh-Hans': ['欺诈游戏'], 'zh-Hant': ['詐欺遊戲'] }, sites: [{ site: 'bangumi', id: '580133' }, { site: 'aniList', id: '197754' }] }
+  const rows = parseBangumiNames({ items: [item, { ...item, title: 'Original Alias' }, { ...item, sites: [{ site: 'bangumi', id: '197754' }] }, { ...item, sites: [{ site: 'aniList', id: '1' }, { site: 'aniList', id: '2' }] }] })
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].id, 197754)
+  assert.ok(rows[0].synonyms.includes('Original Alias'))
+  assert.ok(rows[0].synonyms.includes('詐欺遊戲'))
+})
+test('old primary cache cannot hide new supplement; one failed update preserves the other source and aliases', async t => {
+  const { db } = await fixture(t)
+  const primary = [{ id: 197754, title: 'LIAR GAME', synonyms: ['詐欺遊戲'] }]
+  const supplemental = [{ id: 197754, title: '欺诈游戏', synonyms: [] }]
+  db.write(() => db.run('INSERT INTO anime_name_catalog VALUES (?,?,?)', ['https://raw.githubusercontent.com/soruly/anilist-chinese/master/anilist-chinese.json', JSON.stringify(primary), '2026-01-01T00:00:00Z']))
+  const options = { db, bundled: primary, supplemental, client: {}, clock: () => new Date('2026-09-20T00:00:00Z'), fetcher: async url => {
+    if (url.includes('soruly')) throw new Error('offline')
+    return new Response(JSON.stringify({ items: [{ title: 'LIAR GAME', titleTranslate: { 'zh-Hans': ['欺诈游戏', '别名测试'] }, sites: [{ site: 'aniList', id: '197754' }] }] }))
+  } }
+  const names = createAnimeNames(options)
+  assert.equal(names.exactId('欺诈游戏'), 197754)
+  await assert.rejects(names.update(), /offline/)
+  assert.equal(names.exactId('诈欺游戏'), 197754)
+  assert.equal(names.exactId('别名测试'), 197754)
+  assert.equal(createAnimeNames(options).exactId('别名测试'), 197754)
+  // Clear the test cache before checking cross-source ambiguity.
+  db.write(() => db.run('DELETE FROM anime_name_catalog'))
+  const clean = createAnimeNames({ db, bundled: [{ id: 1, title: '同名', synonyms: [] }], supplemental: [{ id: 2, title: '同名', synonyms: [] }], client: {} })
+  assert.equal(clean.exactId('同名'), null)
+})
 test('Chinese search resolves simplified/traditional aliases to IDs, preserves seasons and refuses ambiguous auto-link', async t => {
   const { db } = await fixture(t)
   const names = createAnimeNames({ db, bundled, client: {

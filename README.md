@@ -51,7 +51,7 @@ yuc.wiki 继续提供季度新番资料；AniList 通过公开 GraphQL API 提�
 
 升级后，已有 Bangumi 关联保留为“需要重新关联”，不会把旧 ID 当作 AniList ID，也不会再向 Bangumi 发送请求。请在卡片中重新选择 AniList 条目；原观看进度、笔记及单番通知偏好保留。中文搜索支持简繁体和别名，优先用本地名称解析 AniList ID，再读取候选详情。无结果时可换用日文、英文、罗马字或输入 `https://anilist.co/anime/数字`。AniList 暂时不可用时仍显示本地中文候选，关联前必须重新核验。
 
-中文名称来自 [soruly/anilist-chinese](https://github.com/soruly/anilist-chinese)，内置 JSON 快照及 MIT 许可证；简繁转换使用 OpenCC.js。名称库启动后在后台检查，每七天更新一次，失败至少间隔一小时重试；下载完整、校验并原子保存成功后才切换索引。旧缓存与内置快照支持离线检索。用户已确认关联的本地番剧标题也参与别名搜索，解除或更换关联后不再沿用旧映射。名称库更新不覆盖已有关联，观看记录与笔记始终使用原本地 ID。Bangumi 当前不作为在线依赖。
+中文名称来自 [soruly/anilist-chinese](https://github.com/soruly/anilist-chinese)（MIT）及 [bangumi-data](https://github.com/bangumi-data/bangumi-data)（CC BY 4.0），内置快照与许可说明。后者仅提取带明确 AniList ID 的中文译名和别名，例如“欺诈游戏”直接解析为 `197754 / LIAR GAME`，再按 ID 查询 AniList；不把中文原样交给 AniList 当作唯一搜索方式，也不按标题猜测跨站关联。简繁转换使用 OpenCC.js。两份名称库独立在后台检查，每七天更新一次，失败至少间隔一小时重试；下载完整、校验并原子保存成功后才切换索引，一份更新失败不影响另一份。旧缓存与内置快照支持离线检索。用户已确认关联的本地番剧标题也参与别名搜索，解除或更换关联后不再沿用旧映射。名称库更新不覆盖已有关联，观看记录与笔记始终使用原本地 ID。Bangumi 在线 API 不作为依赖。
 
 启动、后台检查以及新增在看番剧时会尝试自动关联。手动解除关联会持久化停止该番剧的自动关联；再次手动关联即可恢复。搜索统一使用本地 `GET /api/anime/search?keyword=...`，旧 AniList 搜索路径保留兼容。测试可用 `ANIME_LOG_ANILIST_URL` 指定模拟 GraphQL 地址（同时停止名称库联网更新），或使用 `ANIME_LOG_NAME_CATALOG_UPDATES=0` 单独停止名称库更新。
 

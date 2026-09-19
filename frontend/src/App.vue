@@ -430,7 +430,7 @@
             <button class="primary compact" data-testid="bind-anilist-candidate" :disabled="bindingBusy" @click="bindAniList(candidate.id)">确认关联</button>
           </article>
         </div>
-        <div v-else-if="bindingSearched && !bindingBusy" class="empty-state compact-empty">没有找到候选，可在下方输入条目链接或 ID。</div>
+        <div v-else-if="bindingSearched && !bindingBusy" class="empty-state compact-empty">未找到此译名，可尝试其他译名、英文或日文名，也可输入 AniList 链接或 ID。</div>
         <form class="binding-manual" @submit.prevent="bindManualAniList">
           <input v-model.trim="manualAniList" data-testid="anilist-manual-input" placeholder="https://anilist.co/anime/123 或 123" />
           <button :disabled="bindingBusy">使用链接或 ID</button>

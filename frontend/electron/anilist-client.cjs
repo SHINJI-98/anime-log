@@ -14,14 +14,6 @@ function normalizeSubject(media) {
   const date = media.startDate || {}
   const airDate = `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`
   return {
-    async subjects(ids) {
-      if (!Array.isArray(ids) || ids.length > 10 || ids.some(id => !Number.isSafeInteger(id) || id < 1)) throw apiError('AniList 条目 ID 无效', 400)
-      const data = await request(`query AnimeCandidates($ids: [Int]) {
-        Page(page: 1, perPage: 10) { media(id_in: $ids, type: ANIME) { ${MEDIA_FIELDS} } }
-      }`, { ids })
-      if (!Array.isArray(data.Page?.media)) throw apiError('AniList 搜索结果不完整')
-      return data.Page.media.map(normalizeSubject)
-    },
     id: media.id,
     name: title.native || title.romaji || title.english || `AniList #${media.id}`,
     displayName: title.english || title.romaji || title.native || `AniList #${media.id}`,
@@ -93,6 +85,14 @@ function createAniListClient({ fetcher = fetch, url = 'https://graphql.anilist.c
       const data = await request(`query SearchAnime($search: String!) {
         Page(page: 1, perPage: 10) { media(search: $search, type: ANIME, sort: SEARCH_MATCH) { ${MEDIA_FIELDS} } }
       }`, { search })
+      if (!Array.isArray(data.Page?.media)) throw apiError('AniList 搜索结果不完整')
+      return data.Page.media.map(normalizeSubject)
+    },
+    async subjects(ids) {
+      if (!Array.isArray(ids) || !ids.length || ids.length > 10 || ids.some(id => !Number.isSafeInteger(id) || id < 1)) throw apiError('AniList 条目 ID 无效', 400)
+      const data = await request(`query AnimeCandidates($ids: [Int]) {
+        Page(page: 1, perPage: 10) { media(id_in: $ids, type: ANIME) { ${MEDIA_FIELDS} } }
+      }`, { ids })
       if (!Array.isArray(data.Page?.media)) throw apiError('AniList 搜索结果不完整')
       return data.Page.media.map(normalizeSubject)
     },

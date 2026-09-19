@@ -49,9 +49,14 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
     await page.locator('[data-testid="open-broadcast-binding"]').click()
     await expect(page.getByRole('dialog', { name: '关联 AniList' })).toBeVisible()
     await expect(page.locator('[data-testid="bind-anilist-candidate"]')).toHaveCount(1)
-    await page.getByTestId('anilist-search-input').fill('葬送的芙莉莲')
+    await page.getByTestId('anilist-search-input').fill('欺诈游戏')
     await page.getByRole('button', { name: '搜索', exact: true }).click()
-    await expect(page.locator('.binding-candidates')).toContainText('葬送的芙莉莲')
+    await expect(page.locator('.binding-candidates')).toContainText('欺诈游戏')
+    await expect(page.locator('.binding-candidates')).toContainText('LIAR GAME')
+    await expect(page.locator('.binding-candidates')).not.toContainText('暂不可用')
+    await page.locator('[data-testid="bind-anilist-candidate"]').click()
+    await expect(page.locator('[data-testid="broadcast-status"]')).toContainText('预计播至第 1 集')
+    await page.locator('[data-testid="open-broadcast-binding"]').click()
     await page.getByTestId('anilist-manual-input').fill('https://bgm.tv/subject/321')
     await page.getByRole('button', { name: '使用链接或 ID' }).click()
     await expect(page.getByRole('dialog', { name: '关联 AniList' })).toContainText('请输入有效的 AniList 动画链接或 ID')
@@ -462,11 +467,11 @@ function startFakeAniList() {
     const { query, variables } = JSON.parse(Buffer.concat(chunks).toString())
     const subject = { id: 321, type: 'ANIME', title: { native: 'テストアニメ', english: 'E2E Anime' }, startDate: { year: 2026, month: 7, day: 1 } }
     if (query.includes('SearchAnime')) return response.end(JSON.stringify({ data: { Page: { media: [subject] } } }))
-    if (query.includes('AnimeCandidates')) return response.end(JSON.stringify({ data: { Page: { media: variables.ids.map(id => ({ ...subject, id })) } } }))
-    if (query.includes('AnimeSubject') && variables.id === 321) return response.end(JSON.stringify({ data: { Media: subject } }))
+    if (query.includes('AnimeCandidates')) return response.end(JSON.stringify({ data: { Page: { media: variables.ids.map(id => ({ ...subject, id, title: { native: id === 197754 ? 'LIAR GAME' : 'テストアニメ' } })) } } }))
+    if (query.includes('AnimeSubject') && [321, 197754].includes(variables.id)) return response.end(JSON.stringify({ data: { Media: { ...subject, id: variables.id } } }))
     if (query.includes('AiringEpisodes')) {
       response.end(JSON.stringify({ data: { Page: { pageInfo: { hasNextPage: false }, airingSchedules:
-        [yesterday, today, tomorrow].map((date, index) => ({ id: 8001 + index, mediaId: 321, episode: index + 1, airingAt: Date.parse(`${date}T22:00:00+08:00`) / 1000 }))
+        [yesterday, today, tomorrow].map((date, index) => ({ id: 8001 + index, mediaId: variables.mediaId, episode: index + 1, airingAt: Date.parse(`${date}T22:00:00+08:00`) / 1000 }))
       } } }))
       return
     }
