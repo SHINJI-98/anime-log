@@ -13,6 +13,9 @@
 - 桌面进程抓取 yuc.wiki 并处理图片，前端调用应用内部 `anime-log://local/api`，不监听 HTTP 端口。
 - 追番和笔记保存在 Electron 用户数据目录的 `anime-log.db`。
 
+<img width="2550" height="1736" alt="image" src="https://github.com/user-attachments/assets/b8c337fd-8087-49cf-91a5-d7fa97dad27a" />
+<img width="2418" height="1426" alt="image" src="https://github.com/user-attachments/assets/2d3d0be8-467a-4bf4-9e01-28b9487a5ac4" />
+
 ## API
 
 - `GET /api/seasons/current`
