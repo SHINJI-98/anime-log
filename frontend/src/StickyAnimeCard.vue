@@ -7,15 +7,28 @@
       <h3 :title="record.anime.title">{{ record.anime.title }}</h3>
     </div>
     <div class="sticky-progress"><span>已看 {{ record.watchedEpisodes }} / {{ record.anime.totalEpisodes || '?' }}</span><button :disabled="busy || (record.anime.totalEpisodes > 0 && record.watchedEpisodes >= record.anime.totalEpisodes)" :aria-label="`${record.anime.title} 已看加一集`" @click="$emit('increment')">+1</button></div>
+    <div class="sticky-broadcast" data-testid="sticky-broadcast" :title="broadcastHint">
+      {{ airedEpisode === null ? '播出未知' : `预计播至第 ${airedEpisode} 集` }}
+      <small v-if="airedEpisode !== null && (record.broadcast.stale || record.broadcast.error)">数据可能过期</small>
+    </div>
   </li>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { apiUrl } from './api'
 const props = defineProps({ record: { type: Object, required: true }, busy: Boolean })
 defineEmits(['increment'])
 const failed = ref(false)
+const airedEpisode = computed(() => {
+  const broadcast = props.record.broadcast
+  return broadcast && !broadcast.requiresRelink && Number.isFinite(broadcast.estimatedAiredEpisode) ? broadcast.estimatedAiredEpisode : null
+})
+const broadcastHint = computed(() => {
+  const broadcast = props.record.broadcast
+  if (!broadcast || broadcast.requiresRelink) return '关联 AniList 后显示放送进度'
+  return `按 AniList 排期推算，不含今日待播集数${broadcast.lastSuccessAt ? ` · 最近同步 ${new Date(broadcast.lastSuccessAt).toLocaleString('zh-CN')}` : ''}`
+})
 watch(() => props.record.anime.imageUrl, () => { failed.value = false })
 </script>
 
@@ -33,4 +46,6 @@ watch(() => props.record.anime.imageUrl, () => { failed.value = false })
 .sticky-progress button:hover { background: #424957; }
 .sticky-progress button:disabled { opacity: .4; cursor: default; }
 .sticky-progress button:focus-visible { outline: 2px solid #eee; outline-offset: 2px; }
+.sticky-broadcast { padding: 0 5px 6px; color: #c6d4e5; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.sticky-broadcast small { display: block; color: #d4b97f; font-size: 9px; }
 </style>

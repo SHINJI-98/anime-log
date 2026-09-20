@@ -72,6 +72,14 @@ let clockTimer
 let loaded = false
 const panelVisible = ref(window.animeLogDesktop ? window.animeLogConfig.visible : !document.hidden)
 let unsubscribeVisibility
+let unsubscribeBroadcast
+const broadcastDirty = ref(false)
+watch([busy, panelVisible, broadcastDirty], () => {
+  if (!busy.value && panelVisible.value && broadcastDirty.value) {
+    broadcastDirty.value = false
+    load({ keepUndo: true })
+  }
+})
 function visibilityChanged() {
   clearInterval(clockTimer)
   if (!panelVisible.value) return
@@ -82,14 +90,20 @@ function visibilityChanged() {
 onUnmounted(() => {
   clearInterval(clockTimer); clearTimeout(undoTimer)
   unsubscribeVisibility?.()
+  unsubscribeBroadcast?.()
 })
-async function load() {
+async function load({ keepUndo = false } = {}) {
   if (busy.value) return
-  clearTimeout(undoTimer)
-  undo.value = null
+  if (!keepUndo) { clearTimeout(undoTimer); undo.value = null }
   busy.value = true
   error.value = ''
-  try { records.value = await getWatchRecords('watching'); loaded = true }
+  try {
+    records.value = await getWatchRecords('watching'); loaded = true
+    if (undo.value) {
+      const updated = records.value.find(record => record.id === undo.value.record.id)
+      undo.value = updated ? { ...undo.value, record: updated } : null
+    }
+  }
   catch (e) { error.value = e.message }
   finally { busy.value = false }
 }
@@ -124,6 +138,7 @@ async function togglePin() {
   catch (e) { error.value = e.message }
 }
 onMounted(async () => {
+  unsubscribeBroadcast = window.animeLogDesktop.onBroadcastUpdated(() => { broadcastDirty.value = true })
   unsubscribeVisibility = window.animeLogDesktop.onVisibilityChanged(value => {
     panelVisible.value = value
     visibilityChanged()

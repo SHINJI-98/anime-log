@@ -94,10 +94,25 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
     await expect(page.locator('.today-ribbon')).toHaveCount(1)
     await expect(page.locator('.weekday-column').first()).toContainText('E2E Anime')
     await expect(page.locator('.sticky-note li')).toContainText('已看 3 /')
+    await expect(page.getByTestId('sticky-broadcast')).toContainText('预计播至第 1 集')
     const nativePinned = await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.getTitle() !== '我的追番 · 悬浮球').isAlwaysOnTop())
     await expect(page.locator('.sticky-tools button').first()).toHaveAttribute('aria-pressed', String(nativePinned))
     await page.getByRole('button', { name: 'E2E Anime 已看加一集' }).click()
     await expect(page.locator('.sticky-note li')).toContainText('已看 4 /')
+    await page.evaluate(() => {
+      const original = window.fetch
+      window.fetch = async (...args) => {
+        const response = await original(...args)
+        if (String(args[0]).includes('/watch-records?')) {
+          window.fetch = original
+          const records = await response.json()
+          return new Response(JSON.stringify(records.map(record => ({ ...record, broadcast: { ...record.broadcast, estimatedAiredEpisode: 2 } }))))
+        }
+        return response
+      }
+    })
+    await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.getTitle() !== '我的追番 · 悬浮球').webContents.send('anime-log-broadcast-updated', []))
+    await expect(page.getByTestId('sticky-broadcast')).toContainText('预计播至第 2 集')
     await page.getByRole('button', { name: '撤销', exact: true }).click()
     await expect(page.locator('.sticky-note li')).toContainText('已看 3 /')
     await page.evaluate(() => {
