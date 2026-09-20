@@ -1,136 +1,84 @@
 # Agent Notes
 
-## 项目概览
+## 项目与架构
 
-### 桌面版架构更新
+Anime Log 是 Windows 本地追番桌面应用，仅维护桌面端。技术栈为 Electron、Vue 3、Vite、sql.js/SQLite。不要重新引入 Java、Spring Boot、Maven 或本地 HTTP 后端，也不提供独立浏览器模式。
 
-桌面版已移除 Java/Spring Boot 运行依赖。`frontend/electron/main.cjs` 通过 Electron 自定义协议 `anime-log://local/api` 提供同名 API，不监听 HTTP 端口。`local-service.cjs` 处理追番、笔记、抓取和图片；`database.cjs` 使用 sql.js 读写兼容旧版的 SQLite，保存时原子替换并备份已有数据库；`yuc-parser.cjs` 保留 Java hashCode 来源 ID。下面的 Spring Boot 说明仅适用于保留的浏览器模式。
+`frontend/electron/main.cjs` 通过 Electron 自定义协议 `anime-log://local/api` 提供本地 API，不监听 HTTP 端口。主进程负责数据、抓取、同步和系统通知；界面通过 `frontend/src/api.js` 调用本地服务。preload 只暴露受限接口，IPC 必须校验发送者。
 
-桌面开发运行 `cd frontend; npm.cmd run electron:dev`，无需 Maven。桌面修改运行 `npm.cmd run test:e2e`（包含构建、本地服务和 Electron 流程测试）；打包运行 `npm.cmd run electron:build`，之后可运行 `npm.cmd run test:packaged`。修改抓取解析应补充 `frontend/tests/local-service.test.cjs`，修改数据服务应覆盖 SQLite 兼容、持久化和失败处理。桌面端不要重新引入 Java 或本地 HTTP 服务，不要打包个人数据库或前端构建依赖。
-
-Anime Log 是一个个人本地追番网页应用。前端使用 Vue 3 + Vite，后端使用 Spring Boot 2.7 + JDBC + SQLite。新番数据来自 yuc.wiki，后端负责抓取、缓存、图片代理和本地数据持久化，前端只调用本地 `/api` 接口。
-
-主要功能包括：
-
-- 追番列表：按 `watching`、`completed`、`dropped` 和全部状态筛选。
-- 新番发现：按季度展示番剧，支持上一季、当前季、下一季和刷新。
-- 观看进度：记录已看集数，并显示总集数，未知总集数显示 `?`。
-- 番剧笔记：支持总评和分集笔记，前端带轻量富文本编辑与清洗。
-- 图片代理：前端封面通过后端 `/api/images/proxy` 加载，避免跨域和防盗链问题。
+数据来源：yuc.wiki 提供季度新番；AniList 提供放送排期；本地中文名称索引合并 anilist-chinese 与 bangumi-data 中明确的 AniList ID 映射。不要按模糊标题自动绑定，也不要将不同站点的 ID 混用。
 
 ## 目录结构
 
-- `pom.xml`：Maven 父项目，只包含 `backend` 模块。
-- `backend/`：Spring Boot 后端。
-  - `src/main/java/com/animelog/anime/`：季度、新番抓取、yuc.wiki 解析、图片代理。
-  - `src/main/java/com/animelog/watch/`：追番记录 API、服务、仓储和状态枚举。
-  - `src/main/java/com/animelog/note/`：番剧总评和分集笔记 API、服务、仓储。
-  - `src/main/java/com/animelog/config/`：配置、CORS、异常处理、SQLite 表初始化。
-  - `src/main/resources/application.yml`：端口、SQLite 路径、yuc.wiki 地址和缓存 TTL。
-  - `src/test/java/com/animelog/`：后端集成测试和解析器测试。
-- `frontend/`：Vue 3 + Vite 前端。
-  - `src/App.vue`：当前主要界面和交互逻辑都在这里。
-  - `src/api.js`：前端 API 封装。
-  - `src/styles.css`：全局样式。
-  - `vite.config.js`：Vite dev server 和 `/api` 代理到后端 `localhost:8080`。
-- `backend/data/anime-log.db`：本地运行时 SQLite 数据库。
-- `frontend/node_modules/`、`frontend/dist/`、`backend/target/`：生成物或依赖目录，通常不要手动编辑。
+- `frontend/electron/main.cjs`：应用生命周期、自定义协议、通知与 IPC。
+- `frontend/electron/local-service.cjs`：追番、笔记、季度缓存、图片和放送接口。
+- `frontend/electron/database.cjs`：sql.js、SQLite 升级、备份、原子保存与失败回滚。
+- `frontend/electron/yuc-parser.cjs`：星期总表及番剧介绍列表解析；保留历史 Java hashCode 算法生成来源 ID，运行时不依赖 Java。
+- `frontend/electron/anilist-client.cjs`、`anime-names.cjs`、`broadcast-*.cjs`：远程查询、中文名称和放送同步。
+- `frontend/electron/desktop-windows.cjs`：便签、悬浮球、托盘与窗口设置。
+- `frontend/src/App.vue`：完整界面，包括新番、追番和笔记。
+- `frontend/src/DesktopShell.vue`、`StickyNote.vue`、`StickyAnimeCard.vue`：完整界面与便签切换。
+- `frontend/src/api.js`：所有前端数据接口。
+- `frontend/tests/local-service.test.cjs`：解析、SQLite 兼容、持久化和失败处理。
+- `frontend/tests/e2e/`：Electron 端到端流程。
+- `frontend/tests/fixtures/`：独立的固定测试页面和辅助程序。
+- `frontend/node_modules/`、`dist/`、`release/`：依赖和生成物，不作为源码提交。
 
-## 常用命令
+## 开发与验证
 
-在仓库根目录运行后端：
+在 `frontend` 目录执行：
 
 ```powershell
-mvn -pl backend spring-boot:run
+npm.cmd install
+npm.cmd run electron:dev
 ```
 
-运行后端测试：
+Vite 仅用于 Electron 开发窗口热更新。不要让用户单独启动浏览器后端。直接在普通浏览器打开开发页面时只显示桌面入口提示。
+
+修改后至少运行前端构建；桌面功能和数据服务修改运行完整测试：
 
 ```powershell
-mvn -pl backend test
-```
-
-运行前端开发服务器：
-
-```powershell
-cd frontend
-npm.cmd run dev
-```
-
-构建前端：
-
-```powershell
-cd frontend
 npm.cmd run build
+npm.cmd run test:e2e
 ```
 
-完整本地体验通常需要先启动后端，再启动前端。Vite 默认运行在 `http://127.0.0.1:5173`，后端默认运行在 `http://localhost:8080`。
-
-## API 速查
-
-后端 API 当前包括：
-
-- `GET /api/seasons/current`
-- `GET /api/anime?season=YYYYMM`
-- `POST /api/anime/refresh?season=YYYYMM`
-- `GET /api/watch-records?status=watching|completed|dropped`
-- `POST /api/watch-records`
-- `PATCH /api/watch-records/{id}`
-- `DELETE /api/watch-records/{id}`
-- `GET /api/anime/{animeSourceId}/notes`
-- `PUT /api/anime/{animeSourceId}/notes/summary`
-- `PUT /api/anime/{animeSourceId}/notes/episodes/{episodeNumber}`
-- `DELETE /api/anime/{animeSourceId}/notes/episodes/{episodeNumber}`
-- `GET /api/images/proxy?url=...`
-
-前端新增接口时，优先放在 `frontend/src/api.js`，再由组件调用。
-
-## 数据库约定
-
-SQLite 表由 `DatabaseInitializer` 在后端启动时创建：
-
-- `anime_sources`：按季度缓存 yuc.wiki 番剧源数据，`source_url` 唯一。
-- `season_refreshes`：记录季度刷新时间，用于缓存 TTL。
-- `watch_records`：追番记录，`anime_source_id` 唯一，删除番剧源时级联删除。
-- `anime_notes`：番剧笔记，`episode_number = 0` 表示总评，大于 `0` 表示分集笔记。
-
-测试使用 `anime-log.database-path=target/test-anime-log.db`，不要让测试直接写入 `backend/data/anime-log.db`。
-
-## 编码与文本注意事项
-
-项目包含中文 UI 文案。后续修改中文文本时请保持 UTF-8 编码。当前 PowerShell 输出里可能会把中文显示成乱码，这通常是终端编码问题，不代表源码一定损坏。编辑前尽量用支持 UTF-8 的编辑器确认真实内容。
-
-Java 代码当前保持 Java 8 兼容，不要引入 Java 9+ API 或语法。仓储层直接使用 `JdbcTemplate` 和手写 SQL，保持参数化查询，避免拼接用户输入。
-
-前端当前是单文件应用形态，较多状态和富文本逻辑集中在 `App.vue`。做较大前端改动时，可以逐步拆组件，但不要顺手重写整体 UI。富文本内容保存前要继续经过 `sanitizeRichText` 清洗。
-
-## 开发约定
-
-- 优先保持现有技术栈：Spring Boot 2.7、Java 8、JdbcTemplate、Vue 3、Vite。
-- 修改后端行为时，补充或更新 `backend/src/test/java` 下的集成测试。
-- 修改 yuc.wiki 解析逻辑时，优先更新 `YucWikiParserTest`，因为外部页面结构可能变化。
-- 修改前端 API 路径时，同时检查 `frontend/src/api.js`、控制器路径和 Vite 代理。
-- 不要把运行时数据库、构建产物或依赖目录当成源文件提交或手动维护。
-- 对会访问外网的功能保持可失败设计；yuc.wiki 抓取失败应返回明确错误，而不是让前端静默空白。
-- 每次修改代码后，都需要提交一次git commit
-
-## 验证建议
-
-文档或纯样式改动可以不跑全量测试，但应说明未运行原因。后端逻辑改动至少运行：
+打包与打包验证：
 
 ```powershell
-mvn -pl backend test
+npm.cmd run electron:build
+npm.cmd run test:packaged
 ```
 
-前端逻辑或样式改动至少运行：
+文档或纯样式改动可以不跑全量测试，但应说明原因。功能测试使用临时数据库、固定时钟和模拟网络，不依赖外网；真实网络核验应与自动化测试分开。不得用测试读取或写入个人数据库。涉及系统通知时，模拟测试不能代替 Windows 实测。
 
-```powershell
-cd frontend
-npm.cmd run build
-```
+## 数据与兼容
 
-涉及端到端体验时，同时启动后端和前端，在浏览器检查追番列表、新番页、笔记页、图片预览和刷新按钮。
+- 追番、笔记和设置存放于 Electron 用户数据目录。
+- `anime_sources` 保存季度来源；`watch_records`、`anime_notes` 引用稳定的本地番剧 ID。
+- `season_refreshes` 保存刷新时间及 `parser_version`；解析器改变时提升版本，使旧缓存重新解析。
+- `broadcast_bindings`、`broadcast_episodes`、`broadcast_alerts` 独立保存放送关联、缓存与去重状态。
+- `anime_name_catalog` 保存名称库快照；`anime_link_preferences` 保存自动关联偏好。
+- 迁移使用增量表/列变更，重复启动必须安全。修改数据服务要覆盖旧 SQLite 兼容、保存失败回滚和重启恢复。
+- 网络请求在事务外完成；获取完整结果后再原子写入，失败保留最近成功缓存。
+- yuc 页面结构变化不能孤立追番和笔记；保留来源 ID 算法，对旧错误来源链接的修复应保留本地 ID。
+- 放送进度标为“预计”，不覆盖已看集数，不因排期缺失推断完结。
+- 旧数据库可以通过 `ANIME_LOG_MIGRATION_DB` 显式导入，仅在目标数据库不存在时使用；不再自动读取旧工程路径。
+- `ANIME_LOG_USER_DATA_DIR` 可指定独立测试数据目录。
+- 旧 `backend/data/` 中可能有个人历史数据库，移除旧工程不代表可以删除这些数据。
 
-## 已知环境细节
+## API 与界面约定
 
-当前仓库在 Windows 路径 `D:\Vibe Coding\anime-log`。在沙箱用户下执行 `git status` 可能遇到 Git 的 dubious ownership 检查。如果只是扫描或改文件，不需要修改全局 Git 配置；需要提交时再由用户确认是否添加 safe.directory。
+- 前端新增接口放在 `frontend/src/api.js`；本地路由放在 `local-service.cjs`。
+- 现有接口包括季度、新番刷新、追番 CRUD、总评/分集笔记、图片代理、中文名称搜索、AniList 条目与放送关联/同步。
+- 保持中文 UTF-8 编码；PowerShell 显示乱码不一定代表源码损坏。
+- 富文本保存前继续使用 `sanitizeRichText` 清洗。
+- 保持现有 UI，可以按功能逐步拆组件，不顺手重写整个应用。
+- 新番页已追番封面和便签封面打开对应详情；追番列表封面保留大图预览。
+- 外网失败显示明确状态，不能静默返回空白或虚构零集。
+- SQL 使用参数化查询，不拼接用户输入。
+- 不提交运行时数据库、个人配置、打包产物或依赖目录。
+- 每次修改代码后，都需要提交一次 Git commit。
+
+## 环境
+
+仓库路径为 `D:\Vibe Coding\anime-log`。Git 若遇到 dubious ownership，不自动修改全局配置；需要提交时再确认 safe.directory。保留现有 SQLite 数据、用户设置和未提交修改。

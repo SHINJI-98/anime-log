@@ -442,7 +442,33 @@ test('quarter sidebar handles rapid navigation and persists theme choices', asyn
   }
 })
 
-function startFakeYucWiki() {
+test('detail-only October pages display separate covers and weekday groups', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-detail-page-'))
+  const fake = await startFakeYucWiki(true)
+  let app
+  try {
+    app = await electron.launch({ args: ['.'], cwd: path.resolve(__dirname, '../..'), env: {
+      ...process.env, ANIME_LOG_LOAD_DIST: '1', ANIME_LOG_USER_DATA_DIR: dir,
+      ANIME_LOG_YUC_BASE_URL: fake.baseUrl, ANIME_LOG_NAME_CATALOG_UPDATES: '0'
+    } })
+    const page = await app.firstWindow()
+    await page.getByTestId('discover-tab').click()
+    await expect(page.getByTestId('schedule-item')).toHaveCount(4)
+    await expect(page.locator('.day-heading h3')).toHaveText(['周三 (水)', '周六 (土)', '其他'])
+    const first = page.getByTestId('schedule-item').filter({ hasText: '测试机甲' })
+    await expect(first).toContainText('10/3周六深夜')
+    await expect(first.locator('img')).toHaveAttribute('alt', '测试机甲')
+    await expect(page.getByTestId('schedule-item').filter({ hasText: '日期未定' })).toContainText('10月放送预定')
+    await page.getByTestId('refresh-season').click()
+    await expect(page.getByTestId('schedule-item')).toHaveCount(4)
+  } finally {
+    if (app) await app.close()
+    await fake.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+function startFakeYucWiki(detailOnly = false) {
   const server = http.createServer((request, response) => {
     if (request.url.endsWith('/poster.jpg')) {
       response.writeHead(200, { 'Content-Type': 'image/jpeg' })
@@ -451,6 +477,7 @@ function startFakeYucWiki() {
     }
 
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+    if (detailOnly) return response.end(fs.readFileSync(path.join(__dirname, '../fixtures/yuc-details.html'), 'utf8').replace(/https?:\/\/i0\.hdslb\.com/g, `http://127.0.0.1:${server.address().port}`))
     response.end(`<!doctype html>
       <html>
         <body>

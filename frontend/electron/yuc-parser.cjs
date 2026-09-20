@@ -1,4 +1,5 @@
 const { load } = require('cheerio/slim')
+const PARSER_VERSION = 2
 const normalize = value => String(value || '').replace(/\s+/g, ' ').trim()
 function cleanTitle(value) {
   const title = normalize(value)
@@ -52,6 +53,26 @@ function parseAnime(html, pageUrl) {
       airTime: dateBlock.length ? airTime(dateBlock, text) : null, totalEpisodes: episodes(text), sourceUrl })
   })
   if (found.size) return [...found.values()]
+  // Upcoming seasons can omit the weekday overview while keeping detail tables.
+  // Read each table in isolation; never use the enclosing article or its ad links.
+  $('.title_main_r').each((_, node) => {
+    const cell = $(node)
+    const title = cleanTitle(textOf(cell.find('[class^=title_cn]').first()))
+    if (!title) return
+    const table = cell.closest('table')
+    const container = table.parent()
+    const previous = container.prev('div')
+    const cover = image(table) || (container.find('.title_main_r').length === 1 ? image(container) : null)
+      || (previous.find('.title_main_r').length === 0 ? image(previous) : null)
+    const schedule = textOf(table.find('.broadcast_r').first()) || null
+    const weekday = schedule?.match(/(?:周|星期|礼拜)([一二三四五六日天])/)
+    const day = weekday ? (weekday[1] === '天' ? '日' : weekday[1]) : null
+    const dayLabels = { 一: '月', 二: '火', 三: '水', 四: '木', 五: '金', 六: '土', 日: '日' }
+    const sourceUrl = `${pageUrl}#date-${javaHash(title)}`
+    found.set(sourceUrl, { title, imageUrl: cover, airDay: day ? `周${day} (${dayLabels[day]})` : null,
+      airTime: schedule, totalEpisodes: episodes(textOf(table)), sourceUrl })
+  })
+  if (found.size) return [...found.values()]
   function titleOf(candidate) {
     for (const selector of ['td[class^=date_title]', '.title_main_r p[class^=title_cn]', 'p[class^=title_cn]', 'td[class^=future_title]', '.title', '.name', 'h1', 'h2', 'h3', 'h4', 'a[title]']) {
       const el = candidate.find(selector).first()
@@ -77,4 +98,4 @@ function parseAnime(html, pageUrl) {
   })
   return [...found.values()]
 }
-module.exports = { parseAnime, javaHash }
+module.exports = { parseAnime, javaHash, PARSER_VERSION }

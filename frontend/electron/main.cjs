@@ -59,9 +59,7 @@ async function startLocalService() {
   service = await createService({
     nameCatalogUpdates: !process.env.ANIME_LOG_ANILIST_URL && process.env.ANIME_LOG_NAME_CATALOG_UPDATES !== '0',
     filename: path.join(userDataPath(), 'anime-log.db'),
-    migrationPath: process.env.ANIME_LOG_MIGRATION_DB || (isDev()
-      ? path.resolve(__dirname, '../../backend/data/anime-log.db')
-      : undefined),
+    migrationPath: process.env.ANIME_LOG_MIGRATION_DB,
     baseUrl: process.env.ANIME_LOG_YUC_BASE_URL || 'https://yuc.wiki',
     anilistUrl: process.env.ANIME_LOG_ANILIST_URL || 'https://graphql.anilist.co'
   })

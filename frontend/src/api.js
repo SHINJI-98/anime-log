@@ -23,9 +23,8 @@ async function request(path, options = {}) {
 
 export function apiUrl(path) {
   const apiBaseUrl = window.animeLogConfig && window.animeLogConfig.apiBaseUrl
-  if (!apiBaseUrl || !path.startsWith('/api')) {
-    return path
-  }
+  if (!path.startsWith('/api')) return path
+  if (!apiBaseUrl) throw new Error('请在 Anime Log 桌面应用中打开此页面')
   return `${apiBaseUrl.replace(/\/$/, '')}${path.slice('/api'.length)}`
 }
 

@@ -1,5 +1,5 @@
 const { openDatabase } = require('./database.cjs')
-const { parseAnime } = require('./yuc-parser.cjs')
+const { parseAnime, PARSER_VERSION } = require('./yuc-parser.cjs')
 const { createAniListClient } = require('./anilist-client.cjs')
 const { createAnimeNames } = require('./anime-names.cjs')
 const { calculateProgress, shanghaiDate, shanghaiHour } = require('./broadcast-progress.cjs')
@@ -93,19 +93,28 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
         if (!items.length) throw new Error('页面中未识别到番剧，已保留原有缓存')
         const now = new Date().toISOString()
         db.write(() => {
-          for (const a of items) db.run(`INSERT INTO anime_sources
+          for (const a of items) {
+            // Repair old detail-parser URLs while preserving referenced local IDs.
+            if (!one('SELECT id FROM anime_sources WHERE source_url=?', [a.sourceUrl])) {
+              const previous = db.rows('SELECT id,source_url FROM anime_sources WHERE season=? AND title=?', [season, a.title])
+              if (previous.length === 1 && !previous[0].source_url.includes('#date-')) {
+                db.run('UPDATE anime_sources SET source_url=? WHERE id=?', [a.sourceUrl, previous[0].id])
+              }
+            }
+            db.run(`INSERT INTO anime_sources
             (season,title,image_url,air_day,air_time,total_episodes,source_url,created_at,updated_at)
             VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(source_url) DO UPDATE SET
             season=excluded.season,title=excluded.title,image_url=excluded.image_url,air_day=excluded.air_day,
             air_time=excluded.air_time,total_episodes=excluded.total_episodes,updated_at=excluded.updated_at`,
           [season, a.title, a.imageUrl, a.airDay, a.airTime, a.totalEpisodes, a.sourceUrl, now, now])
+          }
           const urls = new Set(items.map(a => a.sourceUrl))
           for (const a of db.rows(`SELECT id,source_url FROM anime_sources WHERE season = ?
             AND id NOT IN (SELECT anime_source_id FROM watch_records)
             AND id NOT IN (SELECT anime_source_id FROM anime_notes)`, [season])) {
             if (!urls.has(a.source_url)) db.run('DELETE FROM anime_sources WHERE id = ?', [a.id])
           }
-          db.run('INSERT INTO season_refreshes VALUES (?,?) ON CONFLICT(season) DO UPDATE SET refreshed_at=excluded.refreshed_at', [season, now])
+          db.run('INSERT INTO season_refreshes (season,refreshed_at,parser_version) VALUES (?,?,?) ON CONFLICT(season) DO UPDATE SET refreshed_at=excluded.refreshed_at,parser_version=excluded.parser_version', [season, now, PARSER_VERSION])
         })
         return listAnime(season)
       } catch (error) { fail(`刷新 yuc.wiki 失败：${error.message}`, 502) }
@@ -288,8 +297,8 @@ async function createService({ filename, migrationPath, baseUrl = 'https://yuc.w
     if ((method === 'GET' && route === '/api/anime') || (method === 'POST' && route === '/api/anime/refresh')) {
       const season = url.searchParams.get('season')
       if (!/^\d{4}(01|04|07|10)$/.test(season)) fail('季度格式必须为 YYYY01、YYYY04、YYYY07 或 YYYY10')
-      const cached = one('SELECT refreshed_at FROM season_refreshes WHERE season = ?', [season])
-      if (method === 'POST' || !cached || Date.now() - Date.parse(cached.refreshed_at) >= 24 * 3600000) return refresh(season)
+      const cached = one('SELECT refreshed_at,parser_version FROM season_refreshes WHERE season = ?', [season])
+      if (method === 'POST' || !cached || cached.parser_version !== PARSER_VERSION || Date.now() - Date.parse(cached.refreshed_at) >= 24 * 3600000) return refresh(season)
       return listAnime(season)
     }
     if (route === '/api/watch-records') {

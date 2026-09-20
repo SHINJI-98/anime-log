@@ -15,6 +15,56 @@ const page = items => graphql({ Page: { pageInfo: { hasNextPage: false }, airing
 function card(title = '测试番剧', episodes = '全12话') {
   return `<div><div><div class="div_date_"><img data-src="http://i0.hdslb.com/a.jpg"><p class="imgtext5">23:00</p></div><div><table><tr><td class="date_title_">${title}</td></tr><tr><td>${episodes}</td></tr></table></div></div></div>`
 }
+const detailsHtml = fs.readFileSync(path.join(__dirname, 'fixtures/yuc-details.html'), 'utf8')
+test('detail-only seasons keep per-anime covers, broadcast text and stable IDs without using ads', () => {
+  const url = 'https://yuc.wiki/202610/'
+  const items = parseAnime(detailsHtml, url)
+  assert.equal(items.length, 4)
+  assert.deepEqual(items[0], { title: '测试机甲', imageUrl: 'https://i0.hdslb.com/first.jpg', airDay: '周六 (土)', airTime: '10/3周六深夜', totalEpisodes: 12, sourceUrl: url + '#date-' + javaHash('测试机甲') })
+  assert.equal(items[1].title, '测试续作 第2期')
+  assert.equal(items[1].airDay, '周三 (水)')
+  assert.equal(items[1].airTime, '10/7 星期三 23:30')
+  assert.equal(items[1].imageUrl, 'https://i0.hdslb.com/second.jpg')
+  assert.equal(items[2].airDay, null)
+  assert.equal(items[2].airTime, '10月放送预定')
+  assert.equal(items[3].imageUrl, null)
+  assert.equal(items[3].airTime, null)
+  const schedule = parseAnime('<div class="date2">周六 (土)</div>' + card('测试机甲') + detailsHtml, url)
+  assert.equal(schedule[0].sourceUrl, items[0].sourceUrl)
+  assert.equal(schedule.length, 1)
+})
+test('old season cache refresh repairs detail URLs without losing tracking or notes and remains stable when overview returns', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-detail-upgrade-'))
+  const filename = path.join(dir, 'anime.db')
+  const db = await openDatabase(filename)
+  db.write(() => {
+    db.run("INSERT INTO anime_sources VALUES (42,'202610','测试机甲','https://i0.hdslb.com/ad.jpg',NULL,NULL,NULL,'https://shop.example/ad','old','old')")
+    db.run("INSERT INTO watch_records VALUES (5,42,'watching',3,'old','old')")
+    db.run("INSERT INTO anime_notes VALUES (1,42,0,'保留笔记','old','old')")
+    db.run('INSERT INTO season_refreshes (season,refreshed_at) VALUES (?,?)', ['202610', new Date().toISOString()])
+  })
+  db.close()
+  let html = detailsHtml
+  let calls = 0
+  let service = await createService({ filename, fetcher: async () => { calls++; return new Response(html) } })
+  t.after(() => { service.close(); fs.rmSync(dir, { recursive: true, force: true }) })
+  let items = await service.request('GET', '/api/anime?season=202610')
+  assert.equal(items.length, 4)
+  assert.equal(items.find(item => item.title === '测试机甲').id, 42)
+  assert.equal(items.find(item => item.id === 42).imageUrl, 'https://i0.hdslb.com/first.jpg')
+  assert.equal(calls, 1)
+  await service.request('GET', '/api/anime?season=202610')
+  assert.equal(calls, 1)
+  html = '<div class="date2">周六 (土)</div>' + card('测试机甲')
+  items = await service.request('POST', '/api/anime/refresh?season=202610')
+  assert.equal(items.length, 1)
+  assert.equal(items[0].id, 42)
+  assert.equal((await service.request('GET', '/api/watch-records'))[0].watchedEpisodes, 3)
+  assert.equal((await service.request('GET', '/api/anime/42/notes')).summary.content, '保留笔记')
+  service.close()
+  service = await createService({ filename, fetcher: async () => { throw new Error('must use upgraded cache') } })
+  assert.equal((await service.request('GET', '/api/anime?season=202610'))[0].id, 42)
+})
 
 test('unique Chinese titles auto-link, manual unlink persists, and late auto-link cannot undo unlink', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'anime-auto-link-'))
@@ -377,7 +427,7 @@ test('failed disk save rolls back memory and leaves database intact', async t =>
   try {
     const bytes = fs.readFileSync(filename)
     fs.mkdirSync(filename + '.tmp')
-    assert.throws(() => db.write(() => db.run("INSERT INTO season_refreshes VALUES ('202607','now')")))
+    assert.throws(() => db.write(() => db.run("INSERT INTO season_refreshes (season,refreshed_at) VALUES ('202607','now')")))
     assert.deepEqual(db.rows('SELECT * FROM season_refreshes'), [])
     assert.deepEqual(fs.readFileSync(filename), bytes)
   } finally { db.close() }
@@ -402,9 +452,9 @@ test('external writes are not overwritten by an in-memory desktop database', asy
   const first = await openDatabase(filename)
   const second = await openDatabase(filename)
   try {
-    second.write(() => second.run("INSERT INTO season_refreshes VALUES ('202607','external')"))
+    second.write(() => second.run("INSERT INTO season_refreshes (season,refreshed_at) VALUES ('202607','external')"))
     const bytes = fs.readFileSync(filename)
-    assert.throws(() => first.write(() => first.run("INSERT INTO season_refreshes VALUES ('202610','stale')")), /其他程序修改/)
+    assert.throws(() => first.write(() => first.run("INSERT INTO season_refreshes (season,refreshed_at) VALUES ('202610','stale')")), /其他程序修改/)
     assert.deepEqual(fs.readFileSync(filename), bytes)
   } finally { first.close(); second.close() }
 })

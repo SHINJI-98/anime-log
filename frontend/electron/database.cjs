@@ -114,6 +114,9 @@ async function openDatabase(filename, migrationPath) {
         DROP TABLE broadcast_episodes_legacy;`)
     }
     db.run(schema)
+    if (!rows('PRAGMA table_info(season_refreshes)').some(column => column.name === 'parser_version')) {
+      db.run('ALTER TABLE season_refreshes ADD COLUMN parser_version INTEGER NOT NULL DEFAULT 0')
+    }
     if (!rows('PRAGMA table_info(anime_sources)').some(column => column.name === 'air_day')) {
       db.run('ALTER TABLE anime_sources ADD COLUMN air_day TEXT')
     }

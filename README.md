@@ -1,6 +1,6 @@
 # Anime Log
 
-个人本地追番应用。桌面版使用 Electron + Vue 3，内置 SQLite（sql.js）和 yuc.wiki 抓取逻辑，无需安装 Java，也无需单独启动后端。仓库保留 Spring Boot 代码，用于可选的浏览器开发模式。
+个人本地追番桌面应用。使用 Electron + Vue 3，内置 SQLite（sql.js）和 yuc.wiki 抓取逻辑。项目仅维护桌面端，不提供独立浏览器服务，无需安装 Java 或单独启动后端。
 
 ## 功能
 
@@ -11,25 +11,7 @@
 - 桌面版可将“在看”番剧关联到 AniList，按章节排期展示预计已播进度、今日更新和下一集日期。
 - 应用运行时每小时同步 AniList 排期，并可在北京时间 09:00 后发送可关闭、持久化去重的系统通知。
 - 桌面进程抓取 yuc.wiki 并处理图片，前端调用应用内部 `anime-log://local/api`，不监听 HTTP 端口。
-- 桌面版追番和笔记保存在 Electron 用户数据目录的 `anime-log.db`，浏览器模式使用 `backend/data/anime-log.db`。
-
-## 浏览器开发模式（可选）
-
-后端：
-
-```powershell
-mvn -pl backend spring-boot:run
-```
-
-前端：
-
-```powershell
-cd frontend
-npm.cmd install
-npm.cmd run dev
-```
-
-打开 Vite 输出的地址，通常是 `http://127.0.0.1:5173`。
+- 追番和笔记保存在 Electron 用户数据目录的 `anime-log.db`。
 
 ## API
 
@@ -40,12 +22,14 @@ npm.cmd run dev
 - `POST /api/watch-records`
 - `PATCH /api/watch-records/{id}`
 - `DELETE /api/watch-records/{id}`
-- `GET /api/anilist/search?keyword=...`
+- `GET /api/anime/search?keyword=...`
 - `GET /api/anilist/subjects/{id}`
 - `PUT|DELETE /api/anime/{id}/broadcast-binding`
 - `POST /api/broadcast/refresh`
 
 ## 备注
+
+yuc.wiki 季度页既支持按星期的总表，也支持只有番剧介绍列表的页面。没有总表时，逐条读取封面和放送说明，按原文中的星期分组；日期或星期未定时保留原文，不自行补齐。解析器升级后自动刷新旧季度缓存，页面结构变化不改变已追番条目的本地 ID。
 
 yuc.wiki 继续提供季度新番资料；AniList 通过公开 GraphQL API 提供关联后的放送排期，无需登录。在看番剧的中文标题在本地名称库中精确且唯一匹配时，默认自动核验并关联；同名或未收录条目由用户选择，不按模糊相似度自动绑定。接口的放送时间戳转换为北京时间日期，继续沿用日期级规则：当天 09:00 后提醒今日排期，日期过去后计入预计已播。界面均标为“预计”，不代表平台确认实际播出；缺失排期时不以总集数代替已播进度。
 
@@ -71,7 +55,7 @@ yuc.wiki 继续提供季度新番资料；AniList 通过公开 GraphQL API 提�
 
 便签采用横向七列周历：彩色星期栏、今天标记、封面及标题、观看进度。只请求在看记录，封面按需懒加载；未确定星期的番剧放在下方，窄窗口可横向滚动周历。完整界面和周历复用一个窗口，悬浮球是独立的透明小窗口。置顶是浮在其他窗口上方，不是嵌入 Windows 桌面壁纸层，按钮会反映系统实际置顶状态。
 
-桌面版直接在 Electron 进程内处理追番、笔记、季度缓存和抓取，没有 Java 子进程和 8080 端口依赖。生产包不包含 Spring Boot jar、个人数据库、Vue/Vite 构建工具，只保留编译后的界面和运行时依赖。Electron 内核仍占据主要体积。
+桌面版直接在 Electron 进程内处理追番、笔记、季度缓存和抓取，没有 Java 子进程和 8080 端口依赖。生产包不包含个人数据库、Vue/Vite 构建工具，只保留编译后的界面和运行时依赖。Electron 内核仍占据主要体积。
 
 开发运行：
 
@@ -95,11 +79,13 @@ cd frontend
 npm.cmd run electron:build
 ```
 
+Vite 仅负责 Electron 开发窗口的界面热更新；直接用普通浏览器打开会提示启动桌面应用，不会请求浏览器后端。
+
 生成后可运行 `npm.cmd run test:packaged` 验证打包目录中的桌面程序。输出位于 `frontend/release/Anime-Log-0.1.0-portable.exe`。
 
 ### 数据兼容与保存
 
-沿用旧桌面版用户数据目录中的 `anime-log.db` 和表结构。首次由新数据服务打开已有数据库时，先生成逐字节备份 `anime-log.db.pre-desktop.bak`；开发模式在没有用户数据库时可从 `backend/data/anime-log.db` 导入，原文件不被修改。发布包不会夹带开发者数据库。
+沿用旧桌面版用户数据目录中的 `anime-log.db` 和表结构。首次由新数据服务打开已有数据库时，先生成逐字节备份 `anime-log.db.pre-desktop.bak`；旧数据库仅通过 `ANIME_LOG_MIGRATION_DB` 显式指定后导入，原文件不被修改。发布包不会夹带开发者数据库。
 
 sql.js 将数据库加载到内存，每次修改完成后将完整 SQLite 文件写入临时文件、同步到磁盘并替换正式文件；写盘失败会回滚内存状态。适合个人追番数据，不适合作为大型或多进程共享数据库。请先正常退出旧桌面版再启动新版；发现未合并的 WAL/回滚日志或外部改写时会停止操作，避免覆盖数据。原有笔记清洗逻辑保持不变。
 
