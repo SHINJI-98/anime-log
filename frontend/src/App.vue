@@ -216,7 +216,13 @@
                   referrerpolicy="no-referrer"
                   loading="lazy"
                   decoding="async"
-                  @click="openPoster(anime)"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="isAnimeFollowed(anime.id) ? `查看 ${anime.title} 的追番详情` : `查看 ${anime.title} 的大图`"
+                  :class="{ 'detail-poster': isAnimeFollowed(anime.id) }"
+                  @click="openAnimeCover(anime)"
+                  @keydown.enter="openAnimeCover(anime)"
+                  @keydown.space.prevent="openAnimeCover(anime)"
                   @error="useFallbackPoster"
                 />
                 <span class="time-badge">{{ anime.airTime || '时间未定' }}</span>
@@ -446,7 +452,7 @@
 import './styles.css'
 import SeasonSidebar from './SeasonSidebar.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-const props = defineProps({ active: { type: Boolean, default: true } })
+const props = defineProps({ active: { type: Boolean, default: true }, detailRequest: { type: Object, default: null } })
 watch(() => props.active, value => { if (value) loadWatchRecords() })
 import {
   addWatchRecord,
@@ -821,6 +827,17 @@ async function openNotes(record) {
     view.value = 'notes'
     scrollToTop()
   })
+}
+watch(() => props.detailRequest, request => { if (request?.record) openNotes(request.record) }, { immediate: true })
+
+async function openAnimeCover(anime) {
+  if (!isAnimeFollowed(anime.id)) return openPoster(anime)
+  try {
+    const records = await getWatchRecords('all')
+    const record = records.find(item => item.anime.id === anime.id)
+    if (record) await openNotes(record)
+    else { await loadFollowedAnimeSourceIds(); error.value = '追番记录已不存在，请重新添加' }
+  } catch (err) { error.value = err.message }
 }
 
 async function loadNotes(animeSourceId) {

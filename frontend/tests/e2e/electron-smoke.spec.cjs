@@ -44,6 +44,10 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
     await search.fill('E2E')
     await expect(page.locator('[data-testid="schedule-item"]')).toHaveCount(1)
 
+    await page.getByRole('button', { name: '查看 E2E Anime 的大图' }).click()
+    await expect(page.locator('.poster-modal')).toBeVisible()
+    await page.getByRole('button', { name: '关闭大图' }).click()
+
     await page.locator('[data-testid="follow-anime"]').first().click()
     await expect(page.locator('[data-testid="watch-record-card"]')).toContainText('E2E Anime')
     await page.locator('[data-testid="open-broadcast-binding"]').click()
@@ -75,7 +79,9 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
     await page.locator('[data-testid="discover-tab"]').click()
     await expect(page.locator('[data-testid="follow-anime"]').first()).toHaveText('已追番')
     await expect(page.locator('[data-testid="follow-anime"]').first()).toBeDisabled()
-    await page.locator('[data-testid="watchlist-tab"]').click()
+    await page.getByRole('button', { name: '查看 E2E Anime 的追番详情' }).click()
+    await expect(page.locator('[data-testid="notes-view"] h2')).toHaveText('E2E Anime')
+    await page.getByRole('button', { name: '返回追番列表' }).click()
 
     const progress = page.locator('[data-testid="progress-input"]').first()
     await progress.fill('3')
@@ -139,7 +145,9 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
     }
     await page.reload()
     await expect(page.locator('.sticky-note')).toBeVisible()
-    await page.getByRole('button', { name: '完整界面 ↗' }).click()
+    await page.getByRole('button', { name: '查看 E2E Anime 的追番详情' }).click()
+    await expect(page.locator('[data-testid="notes-view"] h2')).toHaveText('E2E Anime')
+    await page.getByRole('button', { name: '返回追番列表' }).click()
     const restoredWidth = await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.getTitle() !== '我的追番 · 悬浮球').getBounds().width)
     // Windows display scaling may round native window bounds by a few pixels.
     expect(Math.abs(restoredWidth - originalWidth)).toBeLessThanOrEqual(4)

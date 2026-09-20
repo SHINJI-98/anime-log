@@ -416,6 +416,8 @@ button.compact {
 .clickable-poster {
   cursor: zoom-in;
 }
+.clickable-poster.detail-poster { cursor: pointer; }
+.clickable-poster[role="button"]:focus-visible { outline: 2px solid var(--text, #e4e6ec); outline-offset: -2px; }
 
 .back-to-top {
   align-items: center;

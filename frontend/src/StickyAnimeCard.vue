@@ -1,11 +1,11 @@
 <template>
   <li class="sticky-anime-card">
-    <div class="sticky-cover">
+    <button type="button" class="sticky-cover" :aria-label="`查看 ${record.anime.title} 的追番详情`" @click="$emit('details')">
       <img v-if="record.anime.imageUrl && !failed" :src="apiUrl(`/api/images/proxy?url=${encodeURIComponent(record.anime.imageUrl)}`)" :alt="record.anime.title" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error="failed = true" />
       <div v-else class="cover-fallback" aria-hidden="true"><span>{{ record.anime.title.slice(0, 2) }}</span><small>ANIME LOG</small></div>
       <span v-if="record.anime.airTime" class="air-time">{{ record.anime.airTime }}</span>
-      <h3 :title="record.anime.title">{{ record.anime.title }}</h3>
-    </div>
+      <span class="sticky-title" :title="record.anime.title">{{ record.anime.title }}</span>
+    </button>
     <div class="sticky-progress"><span>已看 {{ record.watchedEpisodes }} / {{ record.anime.totalEpisodes || '?' }}</span><button :disabled="busy || (record.anime.totalEpisodes > 0 && record.watchedEpisodes >= record.anime.totalEpisodes)" :aria-label="`${record.anime.title} 已看加一集`" @click="$emit('increment')">+1</button></div>
     <div class="sticky-broadcast" data-testid="sticky-broadcast" :title="broadcastHint">
       {{ airedEpisode === null ? '播出未知' : `预计播至第 ${airedEpisode} 集` }}
@@ -18,7 +18,7 @@
 import { computed, ref, watch } from 'vue'
 import { apiUrl } from './api'
 const props = defineProps({ record: { type: Object, required: true }, busy: Boolean })
-defineEmits(['increment'])
+defineEmits(['increment', 'details'])
 const failed = ref(false)
 const airedEpisode = computed(() => {
   const broadcast = props.record.broadcast
@@ -34,9 +34,10 @@ watch(() => props.record.anime.imageUrl, () => { failed.value = false })
 
 <style scoped>
 .sticky-anime-card { min-width: 0; list-style: none; background: #151618; }
-.sticky-cover { position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: #33373f; }
+.sticky-cover { display: block; width: 100%; padding: 0; border: 0; border-radius: 0; font: inherit; cursor: pointer; position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: #33373f; }
+.sticky-cover:focus-visible { outline: 2px solid #eee; outline-offset: -2px; }
 .sticky-cover img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center 25%; }
-.sticky-cover h3 { position: absolute; inset: auto 0 0; margin: 0; padding: 7px 5px; background: #111b; color: #fff; font-size: 12px; line-height: 1.3; font-weight: 500; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sticky-cover .sticky-title { position: absolute; inset: auto 0 0; margin: 0; padding: 7px 5px; background: #111b; color: #fff; font-size: 12px; line-height: 1.3; font-weight: 500; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .air-time { position: absolute; top: 5px; left: 5px; max-width: calc(100% - 18px); padding: 2px 4px; background: #0009; color: #fff; font-size: 10px; border-radius: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cover-fallback { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(145deg, #454c59, #242730); color: #bfc5d2; }
 .cover-fallback span { font-size: 28px; font-weight: 300; letter-spacing: 4px; }

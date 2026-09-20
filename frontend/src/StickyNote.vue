@@ -24,7 +24,7 @@
             <h2>{{ day.label }}</h2><span class="weekday-english">{{ day.english }}</span>
           </header>
           <ul class="day-cards">
-            <StickyAnimeCard v-for="record in day.items" :key="record.id" :record="record" :busy="busy" @increment="increment(record)" />
+            <StickyAnimeCard v-for="record in day.items" :key="record.id" :record="record" :busy="busy" @increment="increment(record)" @details="$emit('details', record)" />
           </ul>
           <p v-if="!day.items.length" class="day-empty">{{ view === 'today' ? '今天没有安排播出的追番' : '暂无追番' }} <button v-if="view === 'today'" @click="view = 'week'">查看本周</button></p>
         </section>
@@ -32,7 +32,7 @@
     </div>
     <section v-if="unscheduled.length && view === 'week'" class="unscheduled" aria-label="其他与时间未定">
       <h2>其他 / 时间未定 <span>{{ unscheduled.length }}</span></h2>
-      <ul class="unscheduled-cards"><StickyAnimeCard v-for="record in unscheduled" :key="record.id" :record="record" :busy="busy" @increment="increment(record)" /></ul>
+      <ul class="unscheduled-cards"><StickyAnimeCard v-for="record in unscheduled" :key="record.id" :record="record" :busy="busy" @increment="increment(record)" @details="$emit('details', record)" /></ul>
     </section>
     <footer class="sticky-footer">我的追番 <span>按星期安排播出 · 点击 +1 记录观看进度</span></footer>
   </main>
@@ -42,7 +42,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import StickyAnimeCard from './StickyAnimeCard.vue'
 import { getWatchRecords, updateWatchRecord } from './api'
-defineEmits(['expand', 'settings'])
+defineEmits(['expand', 'settings', 'details'])
 const records = ref([])
 const busy = ref(false)
 const error = ref('')

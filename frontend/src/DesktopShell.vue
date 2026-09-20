@@ -1,9 +1,9 @@
 <template>
-  <StickyNote v-if="compact" @expand="setCompact(false)" @settings="showSettings = true" />
+  <StickyNote v-if="compact" @expand="setCompact(false)" @settings="showSettings = true" @details="openDetails" />
   <div v-show="!compact">
     <button v-if="desktop" class="sticky-entry" @click="setCompact(true)">桌面便签</button>
     <button v-if="desktop" class="desktop-settings-entry" @click="showSettings = true">设置</button>
-    <FullApp v-if="fullLoaded" :active="!compact" />
+    <FullApp v-if="fullLoaded" :active="!compact" :detail-request="detailRequest" />
   </div>
   <DesktopSettings v-if="showSettings" @close="showSettings = false" />
 </template>
@@ -17,6 +17,11 @@ const desktop = window.animeLogDesktop
 const showSettings = ref(false)
 const compact = ref(!!desktop && window.animeLogConfig.compact === true)
 const fullLoaded = ref(!compact.value)
+const detailRequest = ref(null)
+async function openDetails(record) {
+  await setCompact(false)
+  detailRequest.value = { record }
+}
 const unsubscribe = desktop?.onModeChanged(value => {
   compact.value = value
   try { localStorage.setItem('anime-log-compact', String(value)) } catch {}
