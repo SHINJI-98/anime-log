@@ -233,7 +233,8 @@
                 <button
                   class="primary compact"
                   data-testid="follow-anime"
-                  :disabled="isAnimeFollowed(anime.id)"
+                  :disabled="followPending.has(String(anime.id))"
+                  :title="isAnimeFollowed(anime.id) ? '取消追番' : '追番'"
                   @click="followAnime(anime.id)"
                 >
                   {{ isAnimeFollowed(anime.id) ? '已追番' : '追番' }}
@@ -481,6 +482,7 @@ const error = ref('')
 const selectedStatus = ref('watching')
 const watchRecords = ref([])
 const followedAnimeSourceIds = ref(new Set())
+const followPending = ref(new Set())
 const animeList = ref([])
 const animeSearchInput = ref(null)
 const animeSearchQuery = ref('')
@@ -781,14 +783,24 @@ async function refreshCurrentSeason() {
 }
 
 async function followAnime(animeSourceId) {
-  if (isAnimeFollowed(animeSourceId)) {
-    return
+  const key = String(animeSourceId)
+  if (followPending.value.has(key)) return
+  followPending.value.add(key)
+  try {
+    await withLoading(async () => {
+      if (isAnimeFollowed(animeSourceId)) {
+        const records = await getWatchRecords('all')
+        const record = records.find(item => String(item.anime.id) === key)
+        if (record) await deleteWatchRecord(record.id)
+      } else {
+        await addWatchRecord(animeSourceId)
+      }
+      await loadFollowedAnimeSourceIds()
+      watchRecords.value = await getWatchRecords(selectedStatus.value)
+    })
+  } finally {
+    followPending.value.delete(key)
   }
-  await withLoading(async () => {
-    await addWatchRecord(animeSourceId)
-    await loadFollowedAnimeSourceIds()
-    watchRecords.value = await getWatchRecords(selectedStatus.value)
-  })
 }
 
 async function saveStatus(record, status) {
