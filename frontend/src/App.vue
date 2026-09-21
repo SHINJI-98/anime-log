@@ -451,7 +451,7 @@
 <script setup>
 import './styles.css'
 import SeasonSidebar from './SeasonSidebar.vue'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 const props = defineProps({ active: { type: Boolean, default: true }, detailRequest: { type: Object, default: null } })
 watch(() => props.active, value => { if (value) loadWatchRecords() })
 import {
@@ -899,9 +899,18 @@ async function removeEpisode(note) {
   })
 }
 
-function backToWatchlist() {
+async function backToWatchlist() {
+  const record = selectedNoteRecord.value
+  if (record && selectedStatus.value !== 'all' && selectedStatus.value !== record.status) {
+    selectedStatus.value = record.status
+  }
+  await loadWatchRecords()
   view.value = 'watchlist'
   selectedNoteRecord.value = null
+  await nextTick()
+  if (view.value === 'watchlist' && record) {
+    document.getElementById(`watch-record-${record.anime.id}`)?.scrollIntoView({ behavior: 'instant', block: 'center' })
+  }
 }
 
 function scheduleText(anime) {

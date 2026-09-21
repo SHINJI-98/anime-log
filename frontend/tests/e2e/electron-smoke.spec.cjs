@@ -86,7 +86,12 @@ test('desktop app supports tracking, sticky mode and notes without Java or an HT
     await expect(page.locator('[data-testid="follow-anime"]').first()).toBeDisabled()
     await page.getByRole('button', { name: '查看 E2E Anime 的追番详情' }).click()
     await expect(page.locator('[data-testid="notes-view"] h2')).toHaveText('E2E Anime')
+    // Place the card below the fold to exercise return navigation on a long list.
+    const longListStyle = await page.addStyleTag({ content: '[data-testid="watch-record-card"] { margin-top: 1800px; }' })
     await page.getByRole('button', { name: '返回追番列表' }).click()
+    await expect(page.getByTestId('watch-record-card')).toBeInViewport()
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(1000)
+    await longListStyle.evaluate(element => element.remove())
 
     const progress = page.locator('[data-testid="progress-input"]').first()
     await progress.fill('3')
