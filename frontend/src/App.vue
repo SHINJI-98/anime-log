@@ -787,8 +787,6 @@ async function followAnime(animeSourceId) {
   await withLoading(async () => {
     await addWatchRecord(animeSourceId)
     await loadFollowedAnimeSourceIds()
-    view.value = 'watchlist'
-    selectedStatus.value = 'watching'
     watchRecords.value = await getWatchRecords(selectedStatus.value)
   })
 }
